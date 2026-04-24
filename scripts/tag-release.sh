@@ -32,6 +32,9 @@ if git rev-parse "${TAG_NAME}" >/dev/null 2>&1; then
     exit 1
 fi
 
-git tag -a "${TAG_NAME}" -m "${TAG_MESSAGE}"
+if ! git tag -a "${TAG_NAME}" -m "${TAG_MESSAGE}"; then
+    echo "ERROR: Failed to create tag ${TAG_NAME}. Check git configuration and repository state." >&2
+    exit 1
+fi
 echo "==> Created annotated tag: ${TAG_NAME}"
 echo "==> Push with: git push origin ${TAG_NAME}"
