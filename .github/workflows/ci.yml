@@ -13,7 +13,7 @@ permissions:
 env:
   LLVM_VERSION: "21"
   LLVM_TAG: "llvmorg-21.1.8"
-  PICOLIBC_TAG: "1.8.9"
+  PICOLIBC_TAG: "1.8.11"
 
 jobs:
   build-sysroot:
