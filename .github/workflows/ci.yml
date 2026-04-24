@@ -68,14 +68,15 @@ jobs:
           fi
 
       # ── Compile hello world against the CH32V (rv32imafc / ilp32f) toolchain ──
+      # LLVM_TOOLCHAIN is auto-inferred from the toolchain file location
+      # (cmake/ and dist/ are siblings in the release tarball).
       - name: Build hello world — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
         if: steps.get-release.outputs.skip == 'false'
         run: |
           cmake -G Ninja \
             -B build/test-ch32v \
             -S tests/hello_world \
-            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v.cmake \
-            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v.cmake
           cmake --build build/test-ch32v
 
       - name: Build hello world — CH32V (rv32imafc / ilp32f, exn+rtti)
@@ -84,8 +85,7 @@ jobs:
           cmake -G Ninja \
             -B build/test-ch32v-exn-rtti \
             -S tests/hello_world \
-            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v-exn-rtti.cmake \
-            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v-exn-rtti.cmake
           cmake --build build/test-ch32v-exn-rtti
 
       # ── Compile hello world against the CH32V20x (rv32imac / ilp32) toolchain ─
@@ -95,8 +95,7 @@ jobs:
           cmake -G Ninja \
             -B build/test-ch32v20x \
             -S tests/hello_world \
-            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x.cmake \
-            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x.cmake
           cmake --build build/test-ch32v20x
 
       - name: Build hello world — CH32V20x (rv32imac / ilp32, exn+rtti)
@@ -105,6 +104,5 @@ jobs:
           cmake -G Ninja \
             -B build/test-ch32v20x-exn-rtti \
             -S tests/hello_world \
-            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-exn-rtti.cmake \
-            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-exn-rtti.cmake
           cmake --build build/test-ch32v20x-exn-rtti

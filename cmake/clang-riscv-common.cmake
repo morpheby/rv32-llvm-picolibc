@@ -14,7 +14,9 @@
 # automatically via the multilib.yaml embedded in the sysroot.
 #
 # User-facing cache variables (can be overridden on the cmake command line):
-#   LLVM_TOOLCHAIN - sysroot root directory (contains dist/ with multilib.yaml)
+#   LLVM_TOOLCHAIN - sysroot root directory (contains dist/ with multilib.yaml);
+#                    auto-inferred as <cmake-dir>/../dist when using a release
+#                    tarball — no need to set this manually in that case
 #   TOOLCHAIN_PATH - path to clang bin/ directory (empty = use PATH)
 #   CH32_MARCH     - RISC-V -march string (defaults to _CH32_DEFAULT_MARCH)
 #   CH32_MABI      - RISC-V -mabi string  (defaults to _CH32_DEFAULT_MABI)
@@ -75,17 +77,35 @@ set(ARCH_FLAGS
 string(JOIN " " ARCH_FLAGS_STR ${ARCH_FLAGS})
 
 # ----- Sysroot (from LLVM_TOOLCHAIN root) -----
+# LLVM_TOOLCHAIN may be provided by (in decreasing priority):
+#   1. -DLLVM_TOOLCHAIN=<path> on the cmake command line
+#   2. local-config.cmake (included above)
+#   3. Auto-inferred as <cmake-dir>/../dist when using a release tarball
+#      (where cmake/ and dist/ are placed as siblings by package-dist.sh)
+#
 # The toolchain uses multilib; clang selects the correct variant automatically
 # from the -march/-mabi/-fno-exceptions/-fno-rtti flags via multilib.yaml.
 if(NOT LLVM_TOOLCHAIN)
+    get_filename_component(_INFERRED_SYSROOT
+        "${CMAKE_CURRENT_LIST_DIR}/../dist" ABSOLUTE)
+    if(EXISTS "${_INFERRED_SYSROOT}")
+        set(LLVM_TOOLCHAIN "${_INFERRED_SYSROOT}"
+            CACHE PATH "Sysroot directory (auto-inferred from toolchain file location)")
+        message(STATUS "LLVM_TOOLCHAIN auto-inferred: ${LLVM_TOOLCHAIN}")
+    endif()
+endif()
+
+if(NOT LLVM_TOOLCHAIN)
     message(FATAL_ERROR
-        "LLVM_TOOLCHAIN is not set. Copy cmake/local-config.cmake.example to "
-        "cmake/local-config.cmake and set the path, or run doctor.ps1 / doctor.sh.")
+        "LLVM_TOOLCHAIN is not set and could not be auto-inferred.\n"
+        "Expected a dist/ directory next to the cmake/ directory "
+        "(standard release tarball layout).\n"
+        "Set it explicitly with -DLLVM_TOOLCHAIN=<path> or via local-config.cmake.")
 endif()
 if(NOT EXISTS "${LLVM_TOOLCHAIN}")
     message(FATAL_ERROR
         "LLVM_TOOLCHAIN directory not found: ${LLVM_TOOLCHAIN}\n"
-        "Check LLVM_TOOLCHAIN in cmake/local-config.cmake.")
+        "Check the path set via -DLLVM_TOOLCHAIN or in local-config.cmake.")
 endif()
 
 # ----- Exception / RTTI flags -----
