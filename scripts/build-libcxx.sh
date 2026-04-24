@@ -37,28 +37,36 @@ cp -f multilib.yaml "${SYSROOT}/"
 variants=(
   rv32imafc-zicsr-zifencei-xwchc_ilp32f_exn_rtti
   rv32imafc-zicsr-zifencei-xwchc_ilp32f
+  rv32imafc-zicsr-zifencei-xwchc_ilp32f_minimal
   rv32imac-zicsr-zifencei-xwchc_ilp32_exn_rtti
   rv32imac-zicsr-zifencei-xwchc_ilp32
+  rv32imac-zicsr-zifencei-xwchc_ilp32_minimal
 )
 
 cmake_flags=(
   "-DLIBCXXABI_ENABLE_EXCEPTIONS=YES -DLIBCXX_ENABLE_EXCEPTIONS=YES -DLIBCXXABI_ENABLE_STATIC_UNWINDER=YES -DLIBCXX_ENABLE_RTTI=YES -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=ON -DLIBCXXABI_ENABLE_RTTI=ON"
   "-DLIBCXXABI_ENABLE_EXCEPTIONS=NO -DLIBCXX_ENABLE_EXCEPTIONS=NO -DLIBCXXABI_ENABLE_STATIC_UNWINDER=NO -DLIBCXXABI_ENABLE_RTTI=NO -DLIBCXX_ENABLE_RTTI=NO -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DLIBCXXABI_ENABLE_RTTI=OFF"
+  "-DLIBCXXABI_ENABLE_EXCEPTIONS=NO -DLIBCXX_ENABLE_EXCEPTIONS=NO -DLIBCXXABI_ENABLE_STATIC_UNWINDER=NO -DLIBCXXABI_ENABLE_RTTI=NO -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DLIBCXXABI_ENABLE_RTTI=OFF -DLIBCXX_ENABLE_LOCALIZATION=OFF -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF"
   "-DLIBCXXABI_ENABLE_EXCEPTIONS=YES -DLIBCXX_ENABLE_EXCEPTIONS=YES -DLIBCXXABI_ENABLE_STATIC_UNWINDER=YES -DLIBCXX_ENABLE_RTTI=YES -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=ON -DLIBCXXABI_ENABLE_RTTI=ON"
   "-DLIBCXXABI_ENABLE_EXCEPTIONS=NO -DLIBCXX_ENABLE_EXCEPTIONS=NO -DLIBCXXABI_ENABLE_STATIC_UNWINDER=NO -DLIBCXXABI_ENABLE_RTTI=NO -DLIBCXX_ENABLE_RTTI=NO -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DLIBCXXABI_ENABLE_RTTI=OFF"
+  "-DLIBCXXABI_ENABLE_EXCEPTIONS=NO -DLIBCXX_ENABLE_EXCEPTIONS=NO -DLIBCXXABI_ENABLE_STATIC_UNWINDER=NO -DLIBCXXABI_ENABLE_RTTI=NO -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DLIBCXXABI_ENABLE_RTTI=OFF -DLIBCXX_ENABLE_LOCALIZATION=OFF -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF"
 )
 
 flags=(
   "-march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f -flto=auto --sysroot=${SYSROOT}"
   "-march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f -flto=auto --sysroot=${SYSROOT} -fno-exceptions -fno-rtti"
+  "-march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f -flto=auto --sysroot=${SYSROOT} -fno-exceptions -fno-rtti"
   "-march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32 -flto=auto --sysroot=${SYSROOT}"
+  "-march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32 -flto=auto --sysroot=${SYSROOT} -fno-exceptions -fno-rtti"
   "-march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32 -flto=auto --sysroot=${SYSROOT} -fno-exceptions -fno-rtti"
 )
 
 runtimes=(
   "libcxxabi;libcxx;libunwind"
   "libcxxabi;libcxx"
+  "libcxxabi;libcxx"
   "libcxxabi;libcxx;libunwind"
+  "libcxxabi;libcxx"
   "libcxxabi;libcxx"
 )
 
