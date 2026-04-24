@@ -68,7 +68,7 @@ jobs:
           fi
 
       # ── Compile hello world against the CH32V (rv32imafc / ilp32f) toolchain ──
-      - name: Build hello world — CH32V (rv32imafc / ilp32f)
+      - name: Build hello world — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
         if: steps.get-release.outputs.skip == 'false'
         run: |
           cmake -G Ninja \
@@ -78,8 +78,18 @@ jobs:
             -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
           cmake --build build/test-ch32v
 
+      - name: Build hello world — CH32V (rv32imafc / ilp32f, exn+rtti)
+        if: steps.get-release.outputs.skip == 'false'
+        run: |
+          cmake -G Ninja \
+            -B build/test-ch32v-exn-rtti \
+            -S tests/hello_world \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v-exn-rtti.cmake \
+            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+          cmake --build build/test-ch32v-exn-rtti
+
       # ── Compile hello world against the CH32V20x (rv32imac / ilp32) toolchain ─
-      - name: Build hello world — CH32V20x (rv32imac / ilp32)
+      - name: Build hello world — CH32V20x (rv32imac / ilp32, no-exn/no-rtti)
         if: steps.get-release.outputs.skip == 'false'
         run: |
           cmake -G Ninja \
@@ -88,3 +98,13 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x.cmake \
             -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
           cmake --build build/test-ch32v20x
+
+      - name: Build hello world — CH32V20x (rv32imac / ilp32, exn+rtti)
+        if: steps.get-release.outputs.skip == 'false'
+        run: |
+          cmake -G Ninja \
+            -B build/test-ch32v20x-exn-rtti \
+            -S tests/hello_world \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-exn-rtti.cmake \
+            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+          cmake --build build/test-ch32v20x-exn-rtti
