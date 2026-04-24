@@ -37,7 +37,7 @@ or add to `package.json`:
 ```json
 "xpack": {
   "devDependencies": {
-    "@morpheby/rv32-llvm-picolibc": "21.1.8-1.1"
+    "@morpheby/rv32-llvm-picolibc": "21.1.8-1.8.11-1.1"
   }
 }
 ```
@@ -86,20 +86,50 @@ See [NOTICE](NOTICE) for the full attribution.
 
 ---
 
+## Versioning
+
+Release names follow the format:
+
+```
+rv32-llvm-picolibc-xpack-{llvm_ver}-{picolibc_ver}-{release_num}
+```
+
+For example: `rv32-llvm-picolibc-xpack-21.1.8-1.8.11-1` corresponds to tag
+`v21.1.8-1.8.11-1` and xpack npm version `21.1.8-1.8.11-1.1`.
+
 ## Releasing a new version
 
-1. Update pinned source versions in `.github/workflows/build-release.yml`
-   (`LLVM_TAG`, `PICOLIBC_TAG`, `LLVM_VERSION`) and update the patch file if
-   required.
-2. Commit changes to `main`.
-3. Push a version tag:
-   ```sh
-   git tag v21.1.8-1
-   git push origin v21.1.8-1
-   ```
-4. The `build-release.yml` workflow builds the sysroot, creates the GitHub
-   release asset, and automatically updates `package.json` with the correct
-   SHA-256.
+### Option A — via GitHub Actions (recommended)
+
+Trigger the **Bump version and tag** workflow manually from the Actions tab:
+
+1. Go to **Actions → Bump version and tag → Run workflow**.
+2. Enter the LLVM version (e.g. `21.1.8`), picolibc version (e.g. `1.8.11`),
+   and release number (e.g. `1`).
+3. The workflow updates all version references in the repo, commits the changes,
+   creates an annotated tag, and pushes both to `main`.
+4. The pushed tag triggers `build-release.yml`, which builds the sysroot, creates
+   the GitHub release asset, and automatically updates `package.json` with the
+   correct SHA-256.
+
+### Option B — locally
+
+```sh
+# 1. Update version references everywhere
+bash scripts/update-version.sh 21.1.8 1.8.11 1
+
+# 2. Commit the changes
+git add -A
+git commit -m "chore: bump version to 21.1.8-1.8.11-1"
+
+# 3. Create the annotated tag
+bash scripts/tag-release.sh 21.1.8 1.8.11 1
+
+# 4. Push commit + tag
+git push origin main --follow-tags
+```
+
+Update the patch file under `patches/` if the LLVM version changed.
 
 ## Building locally
 
@@ -108,7 +138,7 @@ Requires: LLVM 21 (clang, lld, llvm-ar, llvm-nm, llvm-ranlib), cmake, ninja, mes
 ```sh
 # 1. Clone sources
 git clone --depth=1 --branch llvmorg-21.1.8 https://github.com/llvm/llvm-project.git workspace/llvm-project
-git clone --depth=1 --branch <picolibc-tag>  https://github.com/picolibc/picolibc.git  workspace/picolibc
+git clone --depth=1 --branch 1.8.11  https://github.com/picolibc/picolibc.git  workspace/picolibc
 
 # 2. Apply patches
 cd workspace/llvm-project
@@ -131,5 +161,5 @@ export PICOLIBC_CROSS_FILES_DIR="$(pwd)/picolibc-cross-files"
 (cd workspace/llvm-project && bash ../../scripts/build-libcxx.sh)
 
 # 5. Package
-VERSION=21.1.8-1 OUTDIR=. bash scripts/package-dist.sh
+VERSION=21.1.8-1.8.11-1 OUTDIR=. bash scripts/package-dist.sh
 ```

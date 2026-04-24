@@ -9,10 +9,6 @@ permissions:
   contents: write
 
 env:
-  LLVM_TAG: "llvmorg-21.1.8"
-  LLVM_VERSION: "21"
-  # Update PICOLIBC_TAG to the desired picolibc release
-  PICOLIBC_TAG: "1.8.11"
   INSTALL_PREFIX: "/usr/local/llvm-riscv"
   PICOLIBC_PREFIX: "/usr/local"
 
@@ -24,14 +20,24 @@ jobs:
       - name: Checkout xpack repo
         uses: actions/checkout@v4
 
-      - name: Extract release version from tag
+      - name: Extract versions from tag
         id: version
         run: |
-          # Strip leading 'v', e.g. v21.1.8-1 -> 21.1.8-1
+          # Tag format: v{llvm_ver}-{picolibc_ver}-{release_num}
+          # e.g. v21.1.8-1.8.11-1  →  LLVM=21.1.8  picolibc=1.8.11  release=1
           RAW="${GITHUB_REF_NAME#v}"
-          echo "RELEASE_VERSION=${RAW}" >> "$GITHUB_ENV"
-          echo "XPACK_VERSION=${RAW}.1" >> "$GITHUB_ENV"
+          RELEASE_NUM="${RAW##*-}"
+          REST="${RAW%-*}"
+          PICOLIBC_VER="${REST##*-}"
+          LLVM_VER="${REST%-*}"
+          LLVM_MAJOR="${LLVM_VER%%.*}"
+
+          echo "RELEASE_VERSION=${RAW}"          >> "$GITHUB_ENV"
+          echo "XPACK_VERSION=${RAW}.1"          >> "$GITHUB_ENV"
           echo "TARNAME=rv32-llvm-picolibc-${RAW}" >> "$GITHUB_ENV"
+          echo "LLVM_TAG=llvmorg-${LLVM_VER}"   >> "$GITHUB_ENV"
+          echo "LLVM_VERSION=${LLVM_MAJOR}"      >> "$GITHUB_ENV"
+          echo "PICOLIBC_TAG=${PICOLIBC_VER}"    >> "$GITHUB_ENV"
 
       # ── Install LLVM from apt.llvm.org ────────────────────────────────────
       - name: Install LLVM ${{ env.LLVM_VERSION }}
