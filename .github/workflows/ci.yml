@@ -12,10 +12,105 @@ permissions:
 
 env:
   LLVM_VERSION: "21"
+  LLVM_TAG: "llvmorg-21.1.8"
+  PICOLIBC_TAG: "1.8.9"
 
 jobs:
+  build-sysroot:
+    name: Build sysroot
+    runs-on: ubuntu-24.04
+
+    env:
+      WORKSPACE: ${{ github.workspace }}/workspace
+      DIST_DIR: ${{ github.workspace }}/workspace/rv32-llvm-picolibc
+      INSTALL_PREFIX: /usr/local/llvm-riscv
+      PICOLIBC_PREFIX: /usr/local
+      PICOLIBC_CROSS_FILES_DIR: ${{ github.workspace }}/picolibc-cross-files
+      XPACK_DIR: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install the same LLVM version used to build the sysroot, sourced
+      # directly from the official apt.llvm.org repository.
+      - name: Install LLVM ${{ env.LLVM_VERSION }} from apt.llvm.org
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh ${{ env.LLVM_VERSION }} all
+          for tool in clang clang++ llvm-ar llvm-ranlib llvm-nm \
+                      llvm-strip llvm-objcopy llvm-objdump llvm-size; do
+            sudo ln -sf /usr/bin/${tool}-${{ env.LLVM_VERSION }} /usr/local/bin/${tool}
+          done
+
+      - name: Install build tools
+        run: sudo apt-get install -y cmake ninja-build meson python3
+
+      # Clone source trees.  Shallow clones keep checkout time reasonable.
+      - name: Clone llvm-project (${{ env.LLVM_TAG }})
+        run: |
+          git clone --depth=1 --branch ${{ env.LLVM_TAG }} \
+            https://github.com/llvm/llvm-project.git \
+            workspace/llvm-project
+
+      - name: Clone picolibc (${{ env.PICOLIBC_TAG }})
+        run: |
+          git clone --depth=1 --branch ${{ env.PICOLIBC_TAG }} \
+            https://github.com/picolibc/picolibc.git \
+            workspace/picolibc
+
+      # Apply the vendor patch that enables bare-metal RISC-V builds in
+      # compiler-rt without requiring an Apple-platform host.
+      - name: Apply LLVM patch (${{ env.LLVM_TAG }})
+        run: |
+          cd workspace/llvm-project
+          git apply "$XPACK_DIR/patches/${{ env.LLVM_TAG }}.patch"
+
+      # multilib.yaml must be present in the llvm-project root so that
+      # build-libcxx.sh can copy it into the assembled sysroot.
+      - name: Copy multilib.yaml into llvm-project
+        run: cp multilib.yaml workspace/llvm-project/
+
+      # Build order matters: compiler-rt → picolibc → libcxx.
+      # libcxx uses --sysroot pointing at DIST_DIR/dist which must already
+      # contain compiler-rt and picolibc headers+libs.
+      - name: Build compiler-rt
+        run: |
+          cd workspace/llvm-project
+          bash "$XPACK_DIR/scripts/build-compiler_rt.sh"
+
+      - name: Build picolibc
+        run: |
+          cd workspace/picolibc
+          bash "$XPACK_DIR/scripts/build-picolibc.sh"
+
+      - name: Build libcxx / libcxxabi / libunwind
+        run: |
+          cd workspace/llvm-project
+          bash "$XPACK_DIR/scripts/build-libcxx.sh"
+
+      # Package into a tarball with the same layout used by GitHub Releases:
+      #   rv32-llvm-picolibc-<VERSION>/
+      #     dist/    ← sysroot (multilib variants + multilib.yaml)
+      #     cmake/   ← CMake toolchain files
+      - name: Package sysroot
+        run: |
+          VERSION=$(jq -r .version package.json)
+          OUTDIR="$GITHUB_WORKSPACE" \
+            VERSION="$VERSION" \
+            bash scripts/package-dist.sh
+
+      - name: Upload sysroot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rv32-sysroot
+          path: rv32-llvm-picolibc-*.tar.gz
+          retention-days: 7
+
   test-toolchain:
     name: Test toolchain usability
+    needs: build-sysroot
     runs-on: ubuntu-24.04
 
     steps:
@@ -37,41 +132,27 @@ jobs:
       - name: Install cmake and ninja
         run: sudo apt-get install -y cmake ninja-build
 
-      # Fetch the latest published sysroot release from this repository.
+      # Fetch the sysroot tarball produced by the build-sysroot job.
       # The tarball layout is:
       #   rv32-llvm-picolibc-<ver>/
-      #     dist/          ← LLVM_TOOLCHAIN sysroot (multilib)
-      #     cmake/         ← toolchain files bundled in the release
-      - name: Download latest sysroot release
-        id: get-release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      #     dist/    ← LLVM_TOOLCHAIN sysroot (multilib)
+      #     cmake/   ← toolchain files bundled in the release
+      - name: Download sysroot artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rv32-sysroot
+          path: /tmp/artifact
+
+      - name: Extract sysroot
         run: |
-          LATEST_JSON=$(curl -fsS \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
-            2>/dev/null) || true
+          mkdir -p /tmp/rv32-sysroot
+          tar xzf /tmp/artifact/rv32-llvm-picolibc-*.tar.gz \
+            -C /tmp/rv32-sysroot --strip-components=1
 
-          TAG=$(echo "$LATEST_JSON" | jq -r '.tag_name // empty')
-
-          if [ -z "$TAG" ]; then
-            echo "No releases published yet — skipping compilation tests."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            URL=$(echo "$LATEST_JSON" \
-              | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url' \
-              | head -1)
-            echo "Downloading release ${TAG} from ${URL}"
-            mkdir -p /tmp/rv32-sysroot
-            curl -fsSL "$URL" | tar xzf - -C /tmp/rv32-sysroot --strip-components=1
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── Compile hello world against the CH32V (rv32imafc / ilp32f) toolchain ──
+      # ── Compile hello world against each toolchain variant ────────────────
       # LLVM_TOOLCHAIN is auto-inferred from the toolchain file location
-      # (cmake/ and dist/ are siblings in the release tarball).
+      # (cmake/ and dist/ are siblings inside the extracted tarball).
       - name: Build hello world — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
-        if: steps.get-release.outputs.skip == 'false'
         run: |
           cmake -G Ninja \
             -B build/test-ch32v \
@@ -80,7 +161,6 @@ jobs:
           cmake --build build/test-ch32v
 
       - name: Build hello world — CH32V (rv32imafc / ilp32f, exn+rtti)
-        if: steps.get-release.outputs.skip == 'false'
         run: |
           cmake -G Ninja \
             -B build/test-ch32v-exn-rtti \
@@ -90,7 +170,6 @@ jobs:
 
       # ── Compile hello world against the CH32V20x (rv32imac / ilp32) toolchain ─
       - name: Build hello world — CH32V20x (rv32imac / ilp32, no-exn/no-rtti)
-        if: steps.get-release.outputs.skip == 'false'
         run: |
           cmake -G Ninja \
             -B build/test-ch32v20x \
@@ -99,7 +178,6 @@ jobs:
           cmake --build build/test-ch32v20x
 
       - name: Build hello world — CH32V20x (rv32imac / ilp32, exn+rtti)
-        if: steps.get-release.outputs.skip == 'false'
         run: |
           cmake -G Ninja \
             -B build/test-ch32v20x-exn-rtti \
