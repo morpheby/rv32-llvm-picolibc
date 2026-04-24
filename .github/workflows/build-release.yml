@@ -12,7 +12,7 @@ env:
   LLVM_TAG: "llvmorg-21.1.8"
   LLVM_VERSION: "21"
   # Update PICOLIBC_TAG to the desired picolibc release
-  PICOLIBC_TAG: "1.8.9"
+  PICOLIBC_TAG: "1.8.11"
   INSTALL_PREFIX: "/usr/local/llvm-riscv"
   PICOLIBC_PREFIX: "/usr/local"
 
