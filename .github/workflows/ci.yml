@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LLVM_VERSION: "21"
+
+jobs:
+  test-toolchain:
+    name: Test toolchain usability
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install the same LLVM version used to build the sysroot, sourced
+      # directly from the official apt.llvm.org repository.
+      - name: Install LLVM ${{ env.LLVM_VERSION }} from apt.llvm.org
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh ${{ env.LLVM_VERSION }} all
+          for tool in clang clang++ llvm-ar llvm-ranlib llvm-nm \
+                      llvm-strip llvm-objcopy llvm-objdump llvm-size; do
+            sudo ln -sf /usr/bin/${tool}-${{ env.LLVM_VERSION }} /usr/local/bin/${tool}
+          done
+
+      - name: Install cmake and ninja
+        run: sudo apt-get install -y cmake ninja-build
+
+      # Fetch the latest published sysroot release from this repository.
+      # The tarball layout is:
+      #   rv32-llvm-picolibc-<ver>/
+      #     dist/          ← LLVM_TOOLCHAIN sysroot (multilib)
+      #     cmake/         ← toolchain files bundled in the release
+      - name: Download latest sysroot release
+        id: get-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_JSON=$(curl -fsS \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+            2>/dev/null) || true
+
+          TAG=$(echo "$LATEST_JSON" | jq -r '.tag_name // empty')
+
+          if [ -z "$TAG" ]; then
+            echo "No releases published yet — skipping compilation tests."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            URL=$(echo "$LATEST_JSON" \
+              | jq -r '.assets[] | select(.name | endswith(".tar.gz")) | .browser_download_url' \
+              | head -1)
+            echo "Downloading release ${TAG} from ${URL}"
+            mkdir -p /tmp/rv32-sysroot
+            curl -fsSL "$URL" | tar xzf - -C /tmp/rv32-sysroot --strip-components=1
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Compile hello world against the CH32V (rv32imafc / ilp32f) toolchain ──
+      - name: Build hello world — CH32V (rv32imafc / ilp32f)
+        if: steps.get-release.outputs.skip == 'false'
+        run: |
+          cmake -G Ninja \
+            -B build/test-ch32v \
+            -S tests/hello_world \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v.cmake \
+            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+          cmake --build build/test-ch32v
+
+      # ── Compile hello world against the CH32V20x (rv32imac / ilp32) toolchain ─
+      - name: Build hello world — CH32V20x (rv32imac / ilp32)
+        if: steps.get-release.outputs.skip == 'false'
+        run: |
+          cmake -G Ninja \
+            -B build/test-ch32v20x \
+            -S tests/hello_world \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x.cmake \
+            -DLLVM_TOOLCHAIN=/tmp/rv32-sysroot/dist
+          cmake --build build/test-ch32v20x
