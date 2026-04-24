@@ -1,0 +1,38 @@
+rv32-llvm-picolibc-xpack
+Copyright (c) morpheby
+
+This product is licensed under the Apache License, Version 2.0.
+See LICENSE for the full license text.
+
+================================================================================
+
+Portions of this software are derived from or inspired by the
+LLVM Embedded Toolchain for Arm project:
+
+  https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm
+
+  Copyright (c) 2020-2023, Arm Limited and affiliates.
+  SPDX-License-Identifier: Apache-2.0
+
+Specifically, the following files are adapted or taken directly from that project:
+
+  multilib.yaml
+    Structure, group/variant/mapping layout, and the explanatory comments
+    are derived from the multilib.yaml.in template in the
+    LLVM-embedded-toolchain-for-Arm source tree.
+
+  picolibc-cross-files/*.txt
+    The meson cross-file format and property set (skip_sanity_check,
+    has_link_defsym, separate_boot_flash, etc.) follow the conventions
+    established in the LLVM-embedded-toolchain-for-Arm picolibc
+    cross-compilation files.
+
+  scripts/build-compiler_rt.sh
+  scripts/build-picolibc.sh
+  scripts/build-libcxx.sh
+    The CMake and meson invocation patterns, flag sets, and staged-install
+    technique are derived from the build system of
+    LLVM-embedded-toolchain-for-Arm.
+
+The patches in patches/llvmorg-21.1.8.patch were developed independently
+to enable cross-compilation for RISC-V bare-metal targets.

@@ -1,0 +1,205 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  LLVM_TAG: "llvmorg-21.1.8"
+  LLVM_VERSION: "21"
+  # Update PICOLIBC_TAG to the desired picolibc release
+  PICOLIBC_TAG: "1.8.9"
+  INSTALL_PREFIX: "/usr/local/llvm-riscv"
+  PICOLIBC_PREFIX: "/usr/local"
+
+jobs:
+  build-release:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout xpack repo
+        uses: actions/checkout@v4
+
+      - name: Extract release version from tag
+        id: version
+        run: |
+          # Strip leading 'v', e.g. v21.1.8-1 -> 21.1.8-1
+          RAW="${GITHUB_REF_NAME#v}"
+          echo "RELEASE_VERSION=${RAW}" >> "$GITHUB_ENV"
+          echo "XPACK_VERSION=${RAW}.1" >> "$GITHUB_ENV"
+          echo "TARNAME=rv32-llvm-picolibc-${RAW}" >> "$GITHUB_ENV"
+
+      # ── Install LLVM from apt.llvm.org ────────────────────────────────────
+      - name: Install LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh ${{ env.LLVM_VERSION }} all
+          # Create unversioned symlinks consumed by the build scripts
+          for tool in clang clang++ llvm-ar llvm-ranlib llvm-nm llvm-strip llvm-objdump llvm-as; do
+            sudo ln -sf /usr/bin/${tool}-${{ env.LLVM_VERSION }} /usr/local/bin/${tool}
+          done
+
+      # ── Install build tools ───────────────────────────────────────────────
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build meson python3-pip jq
+
+      # ── Check out sources (sparse for llvm-project) ───────────────────────
+      - name: Sparse-checkout llvm-project
+        run: |
+          mkdir -p build-workspace
+          git clone \
+            --filter=blob:none \
+            --no-checkout \
+            --depth=1 \
+            --branch "${{ env.LLVM_TAG }}" \
+            https://github.com/llvm/llvm-project.git \
+            build-workspace/llvm-project
+          cd build-workspace/llvm-project
+          git sparse-checkout init --cone
+          git sparse-checkout set \
+            cmake \
+            llvm/cmake \
+            runtimes \
+            compiler-rt \
+            libcxx \
+            libcxxabi \
+            libunwind \
+            libc
+          git checkout
+
+      - name: Checkout picolibc
+        run: |
+          git clone \
+            --depth=1 \
+            --branch "${{ env.PICOLIBC_TAG }}" \
+            https://github.com/picolibc/picolibc.git \
+            build-workspace/picolibc
+
+      # ── Apply patches to llvm-project ─────────────────────────────────────
+      - name: Apply llvm-project patches
+        run: |
+          PATCH_FILE="${GITHUB_WORKSPACE}/patches/${{ env.LLVM_TAG }}.patch"
+          if [[ -f "${PATCH_FILE}" ]]; then
+            echo "Applying ${PATCH_FILE}"
+            cd build-workspace/llvm-project
+            git apply "${PATCH_FILE}"
+          else
+            echo "No patch file found for ${{ env.LLVM_TAG }}, skipping"
+          fi
+
+      # ── Set up directory layout expected by scripts ───────────────────────
+      - name: Copy picolibc cross-files
+        run: |
+          mkdir -p build-workspace/picolibc/rv-multilib-scripts
+          cp picolibc-cross-files/*.txt build-workspace/picolibc/rv-multilib-scripts/
+
+      - name: Copy multilib.yaml into llvm-project
+        run: |
+          cp multilib.yaml build-workspace/llvm-project/
+
+      # ── Three-step build ──────────────────────────────────────────────────
+      - name: Build compiler-rt
+        env:
+          WORKSPACE: ${{ github.workspace }}/build-workspace
+          DIST_DIR: ${{ github.workspace }}/build-workspace/rv32-llvm-picolibc
+        run: |
+          cd build-workspace/llvm-project
+          bash "${GITHUB_WORKSPACE}/scripts/build-compiler_rt.sh"
+
+      - name: Build picolibc
+        env:
+          WORKSPACE: ${{ github.workspace }}/build-workspace
+          DIST_DIR: ${{ github.workspace }}/build-workspace/rv32-llvm-picolibc
+          PICOLIBC_CROSS_FILES_DIR: ${{ github.workspace }}/picolibc-cross-files
+        run: |
+          cd build-workspace/picolibc
+          bash "${GITHUB_WORKSPACE}/scripts/build-picolibc.sh"
+
+      - name: Build libcxx / libcxxabi / libunwind
+        env:
+          WORKSPACE: ${{ github.workspace }}/build-workspace
+          DIST_DIR: ${{ github.workspace }}/build-workspace/rv32-llvm-picolibc
+        run: |
+          cd build-workspace/llvm-project
+          bash "${GITHUB_WORKSPACE}/scripts/build-libcxx.sh"
+
+      # ── Package ───────────────────────────────────────────────────────────
+      - name: Package sysroot tarball
+        env:
+          WORKSPACE: ${{ github.workspace }}/build-workspace
+          DIST_DIR: ${{ github.workspace }}/build-workspace/rv32-llvm-picolibc
+          OUTDIR: ${{ github.workspace }}/dist-out
+        run: |
+          mkdir -p dist-out
+          VERSION="${RELEASE_VERSION}" bash scripts/package-dist.sh
+
+      # ── Update package.json with computed sha256 ──────────────────────────
+      - name: Update package.json with release metadata
+        run: |
+          SHA256="$(cat dist-out/${TARNAME}.tar.gz.sha256)"
+          FILENAME="${TARNAME}.tar.gz"
+          BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${RELEASE_VERSION}"
+
+          jq \
+            --arg v  "${XPACK_VERSION}" \
+            --arg sha "${SHA256}" \
+            --arg fn  "${FILENAME}" \
+            --arg url "${BASE_URL}" \
+            '
+              .version = $v |
+              .xpack.binaries.baseUrl = $url |
+              .xpack.binaries.platforms["darwin-arm64"].fileName = $fn |
+              .xpack.binaries.platforms["darwin-arm64"].sha256   = $sha |
+              .xpack.binaries.platforms["darwin-x64"].fileName   = $fn |
+              .xpack.binaries.platforms["darwin-x64"].sha256     = $sha |
+              .xpack.binaries.platforms["linux-arm64"].fileName  = $fn |
+              .xpack.binaries.platforms["linux-arm64"].sha256    = $sha |
+              .xpack.binaries.platforms["linux-x64"].fileName    = $fn |
+              .xpack.binaries.platforms["linux-x64"].sha256      = $sha
+            ' \
+            package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Commit and push updated package.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git add package.json
+          git commit -m "chore: update package.json for v${RELEASE_VERSION} [skip ci]"
+          git push origin HEAD:main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Create GitHub Release ─────────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "rv32-llvm-picolibc ${{ env.RELEASE_VERSION }}"
+          body: |
+            ## rv32-llvm-picolibc ${{ env.RELEASE_VERSION }}
+
+            RISC-V bare-metal LLVM sysroot (compiler-rt + picolibc + libc++) for CH32V targets.
+
+            **Source versions:**
+            - LLVM: `${{ env.LLVM_TAG }}`
+            - picolibc: `${{ env.PICOLIBC_TAG }}`
+
+            **xpack version:** `${{ env.XPACK_VERSION }}`
+
+            Install:
+            ```sh
+            npx xpm install @morpheby/rv32-llvm-picolibc@${{ env.XPACK_VERSION }}
+            ```
+          files: |
+            dist-out/${{ env.TARNAME }}.tar.gz
+            dist-out/${{ env.TARNAME }}.tar.gz.sha256
+          token: ${{ secrets.GITHUB_TOKEN }}

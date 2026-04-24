@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) morpheby
+#
+# Portions derived from LLVM Embedded Toolchain for Arm
+# (https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm)
+# Copyright (c) 2020-2023, Arm Limited and affiliates.
+#
+# Build libc++, libc++abi and libunwind for RISC-V bare-metal variants
+# (only variants that support full exceptions+RTTI or bare no-exn/no-RTTI).
+#
+# Expected environment variables:
+#   WORKSPACE         - root working directory (default: $HOME/workspace)
+#   DIST_DIR          - sysroot assembly directory (default: $WORKSPACE/rv32-llvm-picolibc)
+#   INSTALL_PREFIX    - cmake install prefix (default: /usr/local/llvm-riscv)
+#
+# DIST_DIR/dist is used as the sysroot so that compiler-rt and picolibc
+# are already present before building libcxx.  multilib.yaml must also be
+# present at DIST_DIR/dist/multilib.yaml before this script runs.
+#
+# Run this script from within the llvm-project checkout directory.
+
+set -e -o pipefail
+
+WORKSPACE="${WORKSPACE:-$HOME/workspace}"
+DIST_DIR="${DIST_DIR:-$WORKSPACE/rv32-llvm-picolibc}"
+INSTALL_PREFIX="${INSTALL_PREFIX:-/usr/local/llvm-riscv}"
+
+SYSROOT="${DIST_DIR}/dist"
+
+variants=(
+  rv32imafc-zicsr-zifencei-xwchc_ilp32f_exn_rtti
+  rv32imafc-zicsr-zifencei-xwchc_ilp32f
+  rv32imac-zicsr-zifencei-xwchc_ilp32_exn_rtti
+  rv32imac-zicsr-zifencei-xwchc_ilp32
+)
+
+cmake_flags=(
+  "-DLIBCXXABI_ENABLE_EXCEPTIONS=YES -DLIBCXX_ENABLE_EXCEPTIONS=YES -DLIBCXXABI_ENABLE_STATIC_UNWINDER=YES -DLIBCXX_ENABLE_RTTI=YES -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=ON -DLIBCXXABI_ENABLE_RTTI=ON"
+  "-DLIBCXXABI_ENABLE_EXCEPTIONS=NO -DLIBCXX_ENABLE_EXCEPTIONS=NO -DLIBCXXABI_ENABLE_STATIC_UNWINDER=NO -DLIBCXXABI_ENABLE_RTTI=NO -DLIBCXX_ENABLE_RTTI=NO -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DLIBCXXABI_ENABLE_RTTI=OFF"
+  "-DLIBCXXABI_ENABLE_EXCEPTIONS=YES -DLIBCXX_ENABLE_EXCEPTIONS=YES -DLIBCXXABI_ENABLE_STATIC_UNWINDER=YES -DLIBCXX_ENABLE_RTTI=YES -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=ON -DLIBCXXABI_ENABLE_RTTI=ON"
+  "-DLIBCXXABI_ENABLE_EXCEPTIONS=NO -DLIBCXX_ENABLE_EXCEPTIONS=NO -DLIBCXXABI_ENABLE_STATIC_UNWINDER=NO -DLIBCXXABI_ENABLE_RTTI=NO -DLIBCXX_ENABLE_RTTI=NO -DLIBCXX_CXX_ABI=libcxxabi -DLIBCXXABI_USE_LLVM_UNWINDER=OFF -DLIBCXXABI_ENABLE_RTTI=OFF"
+)
+
+flags=(
+  "-march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f -flto=auto --sysroot=${SYSROOT}"
+  "-march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f -flto=auto --sysroot=${SYSROOT} -fno-exceptions -fno-rtti"
+  "-march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32 -flto=auto --sysroot=${SYSROOT}"
+  "-march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32 -flto=auto --sysroot=${SYSROOT} -fno-exceptions -fno-rtti"
+)
+
+runtimes=(
+  "libcxxabi;libcxx;libunwind"
+  "libcxxabi;libcxx"
+  "libcxxabi;libcxx;libunwind"
+  "libcxxabi;libcxx"
+)
+
+for i in "${!variants[@]}" ; do
+  b="${variants[$i]}"
+  a="${flags[$i]}"
+
+  COMMON_FLAGS="$a -D_GNU_SOURCE -flto=auto"
+  CMAKE_FLAGS="${cmake_flags[$i]}"
+  RUNTIMES="${runtimes[$i]}"
+
+  # shellcheck disable=SC2086
+  cmake -G Ninja -S runtimes -B "build-libcxx-${b}"                           \
+    -DCMAKE_AR="$(which llvm-ar)"                                             \
+    -DCMAKE_CXX_COMPILER="$(which clang++)"                                   \
+    -DCMAKE_C_COMPILER="$(which clang)"                                       \
+    -DCMAKE_NM="$(which llvm-nm)"                                             \
+    -DCMAKE_RANLIB="$(which llvm-ranlib)"                                     \
+    -DCMAKE_SYSTEM_NAME=Generic                                               \
+    -DCMAKE_BUILD_TYPE=Release                                                \
+    -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY                            \
+    -DLLVM_HOST_TRIPLE=riscv32-unknown-none-elf                               \
+    -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"                                 \
+    -DLLVM_ENABLE_RUNTIMES="${RUNTIMES}"                                      \
+    -DLIBCXXABI_BAREMETAL=ON                                                  \
+    -DLIBCXXABI_ENABLE_ASSERTIONS=OFF                                         \
+    -DLIBCXXABI_ENABLE_SHARED=OFF                                             \
+    -DLIBCXXABI_ENABLE_STATIC=ON                                              \
+    -DLIBCXXABI_USE_COMPILER_RT=ON                                            \
+    -DLIBCXXABI_SHARED_OUTPUT_NAME="c++abi-shared"                            \
+    -DLIBCXX_ABI_UNSTABLE=ON                                                  \
+    -DLIBCXX_STATICALLY_LINK_ABI_IN_STATIC_LIBRARY=ON                        \
+    -DLIBCXX_ENABLE_FILESYSTEM=OFF                                            \
+    -DLIBCXX_ENABLE_SHARED=OFF                                                \
+    -DLIBCXX_ENABLE_STATIC=ON                                                 \
+    -DLIBCXX_ENABLE_LOCALIZATION=ON                                           \
+    -DLIBCXX_INCLUDE_BENCHMARKS=OFF                                           \
+    -DLIBCXX_SHARED_OUTPUT_NAME="c++-shared"                                  \
+    -DLIBCXX_INCLUDE_TESTS=OFF                                                \
+    -DLIBUNWIND_ENABLE_ASSERTIONS=OFF                                         \
+    -DLIBUNWIND_ENABLE_SHARED=OFF                                             \
+    -DLIBUNWIND_ENABLE_STATIC=ON                                              \
+    -DLIBUNWIND_IS_BAREMETAL=ON                                               \
+    -DLIBUNWIND_REMEMBER_HEAP_ALLOC=ON                                        \
+    -DLIBUNWIND_USE_COMPILER_RT=ON                                            \
+    -DLIBUNWIND_SHARED_OUTPUT_NAME="unwind-shared"                            \
+    -DRUNTIME_VARIANT_NAME="${b}"                                              \
+    -DLIBCXXABI_ENABLE_THREADS=OFF                                            \
+    -DLIBCXX_ENABLE_MONOTONIC_CLOCK=OFF                                       \
+    -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF                                         \
+    -DLIBCXX_ENABLE_THREADS=OFF                                               \
+    -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF                                       \
+    -DLIBUNWIND_ENABLE_THREADS=OFF                                            \
+    -DRUNTIMES_USE_LIBC=system                                                \
+    -DLLVM_DEFAULT_TARGET_TRIPLE=riscv32-unknown-none-elf                     \
+    -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF                                  \
+    -DLLVM_ENABLE_LTO=ON                                                      \
+    -DCMAKE_ASM_COMPILER_TARGET=riscv32-unknown-none-elf                      \
+    -DCMAKE_CXX_COMPILER_TARGET=riscv32-unknown-none-elf                      \
+    -DCMAKE_C_COMPILER_TARGET=riscv32-unknown-none-elf                        \
+    -DCMAKE_ASM_FLAGS="${COMMON_FLAGS}"                                       \
+    -DCMAKE_C_FLAGS="${COMMON_FLAGS}"                                         \
+    -DCMAKE_CXX_FLAGS="${COMMON_FLAGS}"                                       \
+    ${CMAKE_FLAGS}                                                            \
+    --fresh
+
+  ninja -C "build-libcxx-${b}"
+  DESTDIR="./dist" ninja -C "build-libcxx-${b}" install
+
+  mkdir -p "${DIST_DIR}/dist/${b}/"
+  cp -R "build-libcxx-${b}/dist${INSTALL_PREFIX}/." "${DIST_DIR}/dist/${b}/"
+done
+
+# Copy multilib.yaml to the sysroot root so clang can locate the right variant
+cp -f multilib.yaml "${DIST_DIR}/dist/"
