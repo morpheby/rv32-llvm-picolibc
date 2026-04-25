@@ -1,0 +1,67 @@
+name: Bump version and tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      llvm_ver:
+        description: 'LLVM version (e.g. 21.1.8)'
+        required: true
+        type: string
+      picolibc_ver:
+        description: 'picolibc version (e.g. 1.8.11)'
+        required: true
+        type: string
+      release_num:
+        description: 'Release number (e.g. 1)'
+        required: true
+        default: '1'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bump-and-tag:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Update version references
+        run: |
+          bash scripts/update-version.sh \
+            "${{ inputs.llvm_ver }}" \
+            "${{ inputs.picolibc_ver }}" \
+            "${{ inputs.release_num }}"
+
+      - name: Commit version changes
+        run: |
+          RELEASE_VERSION="${{ inputs.llvm_ver }}-${{ inputs.picolibc_ver }}-${{ inputs.release_num }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git add -A
+          git diff --cached --quiet \
+            || git commit -m "chore: bump version to ${RELEASE_VERSION} [skip ci]"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create annotated tag
+        run: |
+          bash scripts/tag-release.sh \
+            "${{ inputs.llvm_ver }}" \
+            "${{ inputs.picolibc_ver }}" \
+            "${{ inputs.release_num }}"
+
+      - name: Push commit and tag
+        run: git push origin HEAD:main --follow-tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
