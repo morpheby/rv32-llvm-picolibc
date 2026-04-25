@@ -47,14 +47,6 @@ for s in "${PICOLIBC_CROSS_FILES_DIR}"/*.txt ; do
     --buildtype=minsize           \
     --reconfigure
 
-  # LLD does not evaluate PROVIDE→PROVIDE chains: __heap_start = __end fails
-  # because __end is itself PROVIDE-only and never referenced by object code.
-  # Use _end (plain assignment inside .bss) directly.
-  find "build-${b}" -maxdepth 1 -name "*.ld" \
-    -exec sed -i \
-      's/PROVIDE( __heap_start = __end );/PROVIDE( __heap_start = _end );/g' \
-      {} +
-
   ninja -C "build-${b}"
   DESTDIR="./dist" ninja -C "build-${b}" install
 
