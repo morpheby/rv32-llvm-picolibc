@@ -75,17 +75,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install the same LLVM version used to build the sysroot, sourced
-      # directly from the official apt.llvm.org repository.
-      - name: Install LLVM ${{ env.LLVM_VERSION }} from apt.llvm.org
+      # Download the official LLVM release from GitHub.  The apt.llvm.org
+      # package installs a host-configured libc++ __config_site (with threads
+      # enabled for glibc) that takes priority over the sysroot's
+      # cross-compiled __config_site (threads disabled), breaking C++ builds.
+      # The GitHub release tarball ships no __config_site in the generic
+      # include/c++/v1/ directory, so the sysroot's version is picked up
+      # correctly by clang's multilib-aware header search.
+      - name: Download LLVM ${{ env.LLVM_TAG }} from GitHub releases
         run: |
-          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh ${{ env.LLVM_VERSION }} all
-          for tool in clang clang++ llvm-ar llvm-ranlib llvm-nm \
-                      llvm-strip llvm-objcopy llvm-objdump llvm-size; do
-            sudo ln -sf /usr/bin/${tool}-${{ env.LLVM_VERSION }} /usr/local/bin/${tool}
-          done
+          LLVM_VER="${LLVM_TAG#llvmorg-}"
+          wget -qO /tmp/llvm.tar.xz \
+            "https://github.com/llvm/llvm-project/releases/download/${LLVM_TAG}/LLVM-${LLVM_VER}-Linux-X64.tar.xz"
+          mkdir -p /opt/llvm
+          tar xf /tmp/llvm.tar.xz -C /opt/llvm --strip-components=1
+          echo "/opt/llvm/bin" >> "$GITHUB_PATH"
 
       - name: Install build tools
         run: sudo apt-get install -y cmake ninja-build meson python3
@@ -168,22 +172,22 @@ jobs:
 
     env:
       LLVM_VERSION: ${{ needs.get-version.outputs.llvm_version }}
+      LLVM_TAG: ${{ needs.get-version.outputs.llvm_tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install the same LLVM version used to build the sysroot, sourced
-      # directly from the official apt.llvm.org repository.
-      - name: Install LLVM ${{ env.LLVM_VERSION }} from apt.llvm.org
+      # Download the official LLVM release from GitHub.  See the build-sysroot
+      # job for the detailed rationale (apt libc++ __config_site interference).
+      - name: Download LLVM ${{ env.LLVM_TAG }} from GitHub releases
         run: |
-          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh ${{ env.LLVM_VERSION }} all
-          for tool in clang clang++ llvm-ar llvm-ranlib llvm-nm \
-                      llvm-strip llvm-objcopy llvm-objdump llvm-size; do
-            sudo ln -sf /usr/bin/${tool}-${{ env.LLVM_VERSION }} /usr/local/bin/${tool}
-          done
+          LLVM_VER="${LLVM_TAG#llvmorg-}"
+          wget -qO /tmp/llvm.tar.xz \
+            "https://github.com/llvm/llvm-project/releases/download/${LLVM_TAG}/LLVM-${LLVM_VER}-Linux-X64.tar.xz"
+          mkdir -p /opt/llvm
+          tar xf /tmp/llvm.tar.xz -C /opt/llvm --strip-components=1
+          echo "/opt/llvm/bin" >> "$GITHUB_PATH"
 
       - name: Install cmake and ninja
         run: sudo apt-get install -y cmake ninja-build
@@ -204,6 +208,62 @@ jobs:
           mkdir -p /tmp/rv32-sysroot
           tar xzf /tmp/artifact/rv32-llvm-picolibc-*.tar.gz \
             -C /tmp/rv32-sysroot --strip-components=1
+
+      # Verify that clang's multilib mechanism selects the correct sysroot
+      # variant for each architecture / ABI combination.  If multilib is not
+      # selected, clang falls back to its own C++ headers instead of the
+      # cross-compiled ones in the sysroot, breaking all C++ builds.
+      - name: Check multilib selection
+        run: |
+          SYSROOT=/tmp/rv32-sysroot/dist
+
+          echo "=== Sysroot top-level layout ==="
+          ls "$SYSROOT/"
+
+          echo ""
+          echo "=== All multilibs visible to clang ==="
+          clang++ --print-multi-lib \
+            --target=riscv32-unknown-none-elf \
+            -march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f \
+            --sysroot="$SYSROOT"
+
+          echo ""
+          echo "=== Multilib selection per variant ==="
+
+          check_multilib() {
+            local desc="$1" expected_dir="$2"; shift 2
+            local out
+            out=$(clang++ -### --target=riscv32-unknown-none-elf "$@" \
+              --sysroot="$SYSROOT" -x c++ /dev/null 2>&1)
+            if echo "$out" | grep -qF "$expected_dir"; then
+              echo "✓  $desc → $expected_dir"
+            else
+              echo "✗  $desc — expected multilib dir '$expected_dir' not found"
+              echo "$out" | grep -E 'isystem|rv32' | head -10 || true
+              return 1
+            fi
+          }
+
+          check_multilib "rv32imafc/ilp32f  no-exn/no-rtti" \
+            "rv32imafc-zicsr-zifencei-xwchc_ilp32f" \
+            -march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f \
+            -fno-exceptions -fno-rtti
+
+          check_multilib "rv32imafc/ilp32f  exn+rtti" \
+            "rv32imafc-zicsr-zifencei-xwchc_ilp32f_exn_rtti" \
+            -march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f
+
+          check_multilib "rv32imac/ilp32  no-exn/no-rtti" \
+            "rv32imac-zicsr-zifencei-xwchc_ilp32" \
+            -march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32 \
+            -fno-exceptions -fno-rtti
+
+          check_multilib "rv32imac/ilp32  exn+rtti" \
+            "rv32imac-zicsr-zifencei-xwchc_ilp32_exn_rtti" \
+            -march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32
+
+          echo ""
+          echo "All multilib variants selected correctly ✓"
 
       # ── Compile hello world (C) against each toolchain variant ───────────
       # LLVM_TOOLCHAIN is auto-inferred from the toolchain file location
