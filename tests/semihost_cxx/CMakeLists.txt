@@ -6,11 +6,14 @@ add_definitions(
     -D_PICOLIBC_SCANF='m'
 )
 
+add_compile_options(
+    -lc++
+)
+
 add_executable(semihost_cxx main.cpp)
 
 target_link_libraries(semihost_cxx PRIVATE
     crt0-semihost
-    c++
     semihost
 )
 
