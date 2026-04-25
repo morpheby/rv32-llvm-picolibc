@@ -11,10 +11,9 @@
 #   e.g. 21.1.8-1.8.11-1  →  tag v21.1.8-1.8.11-1
 #
 # Updates:
-#   - .github/workflows/build-release.yml  (LLVM_TAG, PICOLIBC_TAG, LLVM_VERSION)
 #   - .github/workflows/ci.yml             (LLVM_TAG, PICOLIBC_TAG, LLVM_VERSION)
 #   - package.json                          (version, xpack binaries URLs/filenames)
-#   - README.md                             (version references in install and build sections)
+#   - README.md                             (LLVM major heading, xpack install version)
 
 set -e -o pipefail
 
@@ -46,7 +45,9 @@ echo "    Release:   ${RELEASE_VERSION}"
 echo "    xpack npm: ${XPACK_VERSION}"
 
 # ── CI workflow files ─────────────────────────────────────────────────────────
-for WF in build-release.yml ci.yml; do
+# build-release.yml derives LLVM_TAG/PICOLIBC_TAG/LLVM_VERSION from the git
+# tag at runtime, so it does not contain hardcoded version env vars.
+for WF in ci.yml; do
     WF_PATH="${REPO_ROOT}/.github/workflows/${WF}"
     "${SED_I[@]}" \
         -e "s|LLVM_TAG: \"llvmorg-[^\"]*\"|LLVM_TAG: \"${LLVM_TAG}\"|" \
@@ -83,26 +84,6 @@ README="${REPO_ROOT}/README.md"
 # xpack install snippet: "@morpheby/rv32-llvm-picolibc": "old" → new xpack version
 "${SED_I[@]}" -E \
     "s|(\"@morpheby/rv32-llvm-picolibc\": )\"[^\"]*\"|\1\"${XPACK_VERSION}\"|g" \
-    "${README}"
-
-# llvm-project shallow clone branch
-"${SED_I[@]}" -E \
-    "s|(--branch )llvmorg-[^[:space:]]+( https://github.com/llvm/llvm-project)|\1${LLVM_TAG}\2|g" \
-    "${README}"
-
-# picolibc shallow clone branch (handles placeholder or a real version)
-"${SED_I[@]}" -E \
-    "s|(--branch )[^[:space:]]+( +https://github.com/picolibc/picolibc)|\1${PICOLIBC_VER}\2|g" \
-    "${README}"
-
-# patch apply reference
-"${SED_I[@]}" -E \
-    "s|(git apply [^ ]*patches/)llvmorg-[^[:space:]]+\.patch|\1${LLVM_TAG}.patch|g" \
-    "${README}"
-
-# VERSION= in package-dist invocation
-"${SED_I[@]}" -E \
-    "s|(VERSION=)[^ ]+( OUTDIR=)|\1${RELEASE_VERSION}\2|g" \
     "${README}"
 
 echo "==> Updated README.md"

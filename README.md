@@ -137,8 +137,8 @@ Requires: LLVM 21 (clang, lld, llvm-ar, llvm-nm, llvm-ranlib), cmake, ninja, mes
 
 ```sh
 # 1. Clone sources
-git clone --depth=1 --branch llvmorg-21.1.8 https://github.com/llvm/llvm-project.git workspace/llvm-project
-git clone --depth=1 --branch 1.8.11  https://github.com/picolibc/picolibc.git  workspace/picolibc
+git clone --depth=1 --branch main https://github.com/llvm/llvm-project.git workspace/llvm-project
+git clone --depth=1 --branch main https://github.com/picolibc/picolibc.git  workspace/picolibc
 
 # 2. Apply patches
 cd workspace/llvm-project
