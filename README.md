@@ -3,28 +3,28 @@
 Binary xpack providing a RISC-V bare-metal sysroot built from:
 
 - **LLVM 21** (compiler-rt builtins, libc++, libc++abi, libunwind)
-- **picolibc** (C standard library)
+- **picolibc 1.8.11** (C standard library)
 
 Targets CH32V series MCUs with the `xwchc` vendor extension.
 
 ## Sysroot variants
 
+Four multilib variants are active and selected automatically by clang based on
+compiler flags (`-march`, `-mabi`, `-fno-exceptions`, `-fno-rtti`):
+
 | Variant directory | `-march` | `-mabi` | Exceptions | RTTI |
 |---|---|---|---|---|
 | `rv32imafc-zicsr-zifencei-xwchc_ilp32f_exn_rtti` | rv32imafc_…_xwchc | ilp32f | ✓ | ✓ |
-| `rv32imafc-zicsr-zifencei-xwchc_ilp32f_exn` | rv32imafc_…_xwchc | ilp32f | ✓ | — |
 | `rv32imafc-zicsr-zifencei-xwchc_ilp32f` | rv32imafc_…_xwchc | ilp32f | — | — |
 | `rv32imac-zicsr-zifencei-xwchc_ilp32_exn_rtti` | rv32imac_…_xwchc | ilp32 | ✓ | ✓ |
-| `rv32imac-zicsr-zifencei-xwchc_ilp32_exn` | rv32imac_…_xwchc | ilp32 | ✓ | — |
 | `rv32imac-zicsr-zifencei-xwchc_ilp32` | rv32imac_…_xwchc | ilp32 | — | — |
 
-compiler-rt and picolibc are built for all 6 variants.
-libc++ / libc++abi / libunwind are only built for the 4 active multilib variants
-(RTTI is required for exception support in libc++, so the `_exn` variants without
-RTTI do not include libc++).
+compiler-rt and picolibc are also built for two additional `_exn`
+(exceptions without RTTI) variants, but those are not included in the multilib
+selection and have no libc++.
 
-The `multilib.yaml` at the sysroot root enables automatic variant selection when
-clang is invoked with `--sysroot=<.content/dist>`.
+The `multilib.yaml` at the sysroot root drives automatic variant selection when
+clang is invoked with `--sysroot=<dist>`.
 
 ## Install via xpm
 
@@ -54,17 +54,40 @@ xpacks/@morpheby/rv32-llvm-picolibc/
         lib/      ← libclang_rt.builtins.a, libc.a, libc++.a, …
       rv32imafc-zicsr-zifencei-xwchc_ilp32f/
         …
-      …
+      rv32imac-zicsr-zifencei-xwchc_ilp32_exn_rtti/
+        …
+      rv32imac-zicsr-zifencei-xwchc_ilp32/
+        …
+    cmake/
+      clang-riscv-ch32v.cmake
+      clang-riscv-ch32v-exn-rtti.cmake
+      clang-riscv-ch32v20x.cmake
+      clang-riscv-ch32v20x-exn-rtti.cmake
+      clang-riscv-common.cmake
 ```
 
 ## Using in CMake
 
-```cmake
--DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/riscv-llvm-ch32v.cmake
+Four toolchain files are provided for common CH32V MCU families:
+
+| Toolchain file | Target family | FPU | Exceptions + RTTI |
+|---|---|---|---|
+| `cmake/clang-riscv-ch32v.cmake` | CH32V (ilp32f) | ✓ | — |
+| `cmake/clang-riscv-ch32v-exn-rtti.cmake` | CH32V (ilp32f) | ✓ | ✓ |
+| `cmake/clang-riscv-ch32v20x.cmake` | CH32V20x (ilp32) | — | — |
+| `cmake/clang-riscv-ch32v20x-exn-rtti.cmake` | CH32V20x (ilp32) | — | ✓ |
+
+Pass the chosen file via `CMAKE_TOOLCHAIN_FILE`.  With the xpm installation:
+
+```sh
+cmake -DCMAKE_TOOLCHAIN_FILE=xpacks/@morpheby/rv32-llvm-picolibc/.content/cmake/clang-riscv-ch32v.cmake ...
 ```
 
-The toolchain file references the sysroot automatically from the xpack install
-path.
+`LLVM_TOOLCHAIN` (the sysroot path) is inferred automatically from the toolchain
+file location — no extra configuration needed.
+
+For C++ projects with exceptions, also link with `-lc++` to pull in libc++,
+libc++abi, and libunwind (all statically bundled in `libc++.a`).
 
 ## License and acknowledgments
 
@@ -133,33 +156,30 @@ Update the patch file under `patches/` if the LLVM version changed.
 
 ## Building locally
 
-Requires: LLVM 21 (clang, lld, llvm-ar, llvm-nm, llvm-ranlib), cmake, ninja, meson.
+Requires: LLVM 21 (clang, clang++, lld, llvm-ar, llvm-nm, llvm-ranlib),
+cmake, ninja, meson.
 
 ```sh
 # 1. Clone sources
 git clone --depth=1 --branch main https://github.com/llvm/llvm-project.git workspace/llvm-project
 git clone --depth=1 --branch main https://github.com/picolibc/picolibc.git  workspace/picolibc
 
-# 2. Apply patches
+# 2. Apply patches (if any)
 cd workspace/llvm-project
 git apply ../../patches/llvmorg-21.1.8.patch
 cd ../..
 
-# 3. Copy cross-files and multilib.yaml into place
-cp picolibc-cross-files/*.txt workspace/picolibc/rv-multilib-scripts/
-cp multilib.yaml workspace/llvm-project/
-
-# 4. Build in order
+# 3. Set up environment
+export XPACK_DIR="$(pwd)"   # root of this repository checkout
 export WORKSPACE="$(pwd)/workspace"
 export DIST_DIR="$WORKSPACE/rv32-llvm-picolibc"
-export INSTALL_PREFIX="/usr/local/llvm-riscv"
-export PICOLIBC_PREFIX="/usr/local"
-export PICOLIBC_CROSS_FILES_DIR="$(pwd)/picolibc-cross-files"
+export PICOLIBC_CROSS_FILES_DIR="$XPACK_DIR/picolibc-cross-files"
 
-(cd workspace/llvm-project && bash ../../scripts/build-compiler_rt.sh)
-(cd workspace/picolibc      && bash ../../scripts/build-picolibc.sh)
-(cd workspace/llvm-project && bash ../../scripts/build-libcxx.sh)
+# 4. Build in order
+(cd workspace/llvm-project &&  "$XPACK_DIR/scripts/build-compiler_rt.sh")
+(cd workspace/picolibc      && "$XPACK_DIR/scripts/build-picolibc.sh")
+(cd workspace/llvm-project && "$XPACK_DIR/scripts/build-libcxx.sh")
 
 # 5. Package
-VERSION=21.1.8-1.8.11-1 OUTDIR=. bash scripts/package-dist.sh
+VERSION=21.1.8-1.8.11-1 OUTDIR=. "$XPACK_DIR/scripts/package-dist.sh"
 ```
