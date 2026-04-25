@@ -147,21 +147,24 @@ set(CMAKE_CXX_FLAGS_INIT "${COMMON_FLAGS_STR} -std=gnu++20 -fno-threadsafe-stati
 set(CMAKE_ASM_FLAGS_INIT "${ARCH_FLAGS_STR} --target=riscv32-unknown-none-elf -x assembler-with-cpp")
 
 # ----- Linker libraries -----
-# Default: the CH32V MCU firmware combination.
-#   -lch32_hal        hardware-abstraction layer (must be built by the project)
+# Default: picolibc startup libs only.
 #   -lcrt0            picolibc C run-time start-up
 #   -lcrt0-inittls    TLS initialisation stub
-#   -Lthird_party/ch32_hal  search path for ch32_hal built in-tree
 #
-# Wrappers can set _CH32_LINKER_LIBS before including this file to select a
-# different combination, e.g. for semihosting:
+# Project-specific libraries (e.g. a hardware-abstraction layer) must be
+# added in the project's own CMakeLists.txt via target_link_libraries().
+# They must not be hard-coded here because this is a generic toolchain file
+# shared by all projects targeting this chip family.
+#
+# Wrapper toolchain files can override _CH32_LINKER_LIBS before including
+# this file to select a different startup combination, e.g. for semihosting:
 #   set(_CH32_LINKER_LIBS "-lcrt0-semihost -lsemihost")
 #
 # NOTE: For the exn+rtti variants (i.e. when _CH32_NO_EXCEPTIONS is FALSE),
 #       add -lc++ to the project's link step to pull in libc++, libc++abi and
 #       libunwind (all statically linked inside libc++.a in the sysroot).
 if(NOT DEFINED _CH32_LINKER_LIBS)
-    set(_CH32_LINKER_LIBS "-lch32_hal -lcrt0 -lcrt0-inittls -Lthird_party/ch32_hal")
+    set(_CH32_LINKER_LIBS "-lcrt0 -lcrt0-inittls")
 endif()
 
 set(CMAKE_EXE_LINKER_FLAGS_INIT
