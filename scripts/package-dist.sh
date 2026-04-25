@@ -9,8 +9,6 @@
 #   DIST_DIR  - sysroot assembly directory (default: $WORKSPACE/rv32-llvm-picolibc)
 #   OUTDIR    - output directory for the tarball (default: current directory)
 #   WORKSPACE - root working directory (default: $HOME/workspace)
-#   XPACK_DIR - root of the xpack source repo (default: directory containing
-#               this script's parent); used to locate cmake toolchain files
 #
 # Outputs:
 #   $OUTDIR/rv32-llvm-picolibc-<VERSION>.tar.gz
@@ -26,9 +24,7 @@ fi
 WORKSPACE="${WORKSPACE:-$HOME/workspace}"
 DIST_DIR="${DIST_DIR:-$WORKSPACE/rv32-llvm-picolibc}"
 OUTDIR="${OUTDIR:-$(pwd)}"
-# Resolve the xpack repo root from the script's own location so that it works
-# whether invoked from the repo root, the scripts/ dir, or via a symlink.
-XPACK_DIR="${XPACK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 TARNAME="rv32-llvm-picolibc-${VERSION}"
 OUTFILE="${OUTDIR}/${TARNAME}.tar.gz"
@@ -41,12 +37,10 @@ trap 'rm -rf "${TMPDIR_PKG}"' EXIT
 mkdir -p "${TMPDIR_PKG}/${TARNAME}"
 cp -R "${DIST_DIR}/dist" "${TMPDIR_PKG}/${TARNAME}/"
 
-# Include cmake toolchain files so users can use the distribution directly
-# without checking out the xpack source repository.
-if [ -d "${XPACK_DIR}/cmake" ]; then
+if [ -d "${ROOT_DIR}/cmake" ]; then
   mkdir -p "${TMPDIR_PKG}/${TARNAME}/cmake"
-  cp "${XPACK_DIR}/cmake/"*.cmake "${TMPDIR_PKG}/${TARNAME}/cmake/"
-  echo "==> Included cmake toolchain files from ${XPACK_DIR}/cmake"
+  cp "${ROOT_DIR}/cmake/"*.cmake "${TMPDIR_PKG}/${TARNAME}/cmake/"
+  echo "==> Included cmake toolchain files from ${ROOT_DIR}/cmake"
 fi
 
 tar czf "${OUTFILE}" -C "${TMPDIR_PKG}" "${TARNAME}"
