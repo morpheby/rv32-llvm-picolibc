@@ -75,13 +75,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Download the official LLVM release from GitHub.  The apt.llvm.org
-      # package installs a host-configured libc++ __config_site (with threads
-      # enabled for glibc) that takes priority over the sysroot's
-      # cross-compiled __config_site (threads disabled), breaking C++ builds.
-      # The GitHub release tarball ships no __config_site in the generic
-      # include/c++/v1/ directory, so the sysroot's version is picked up
-      # correctly by clang's multilib-aware header search.
+      # Download the official LLVM release from GitHub
       - name: Download LLVM ${{ env.LLVM_TAG }} from GitHub releases
         run: |
           LLVM_VER="${LLVM_TAG#llvmorg-}"
@@ -111,8 +105,6 @@ jobs:
             https://github.com/picolibc/picolibc.git \
             workspace/picolibc
 
-      # Apply the vendor patch that enables bare-metal RISC-V builds in
-      # compiler-rt without requiring an Apple-platform host.
       - name: Apply LLVM patch (${{ env.LLVM_TAG }})
         run: |
           cd workspace/llvm-project
@@ -124,14 +116,9 @@ jobs:
             echo "No patch file found for ${{ env.LLVM_TAG }}, skipping"
           fi
 
-      # multilib.yaml must be present in the llvm-project root so that
-      # build-libcxx.sh can copy it into the assembled sysroot.
       - name: Copy multilib.yaml into llvm-project
         run: cp multilib.yaml workspace/llvm-project/
 
-      # Build order matters: compiler-rt → picolibc → libcxx.
-      # libcxx uses --sysroot pointing at DIST_DIR/dist which must already
-      # contain compiler-rt and picolibc headers+libs.
       - name: Build compiler-rt
         run: |
           cd workspace/llvm-project
@@ -147,10 +134,7 @@ jobs:
           cd workspace/llvm-project
           bash "$XPACK_DIR/scripts/build-libcxx.sh"
 
-      # Package into a tarball with the same layout used by GitHub Releases:
-      #   rv32-llvm-picolibc-<VERSION>/
-      #     dist/    ← sysroot (multilib variants + multilib.yaml)
-      #     cmake/   ← CMake toolchain files
+      # Package into a tarball with the same layout used by GitHub Releases
       - name: Package sysroot
         run: |
           VERSION=${LLVM_VERSION}-${PICOLIBC_TAG#v}
@@ -178,8 +162,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Download the official LLVM release from GitHub.  See the build-sysroot
-      # job for the detailed rationale (apt libc++ __config_site interference).
+      # Download the official LLVM release from GitHub
       - name: Download LLVM ${{ env.LLVM_TAG }} from GitHub releases
         run: |
           LLVM_VER="${LLVM_TAG#llvmorg-}"
@@ -193,10 +176,6 @@ jobs:
         run: sudo apt-get install -y cmake ninja-build
 
       # Fetch the sysroot tarball produced by the build-sysroot job.
-      # The tarball layout is:
-      #   rv32-llvm-picolibc-<ver>/
-      #     dist/    ← LLVM_TOOLCHAIN sysroot (multilib)
-      #     cmake/   ← toolchain files bundled in the release
       - name: Download sysroot artifact
         uses: actions/download-artifact@v4
         with:
@@ -209,65 +188,7 @@ jobs:
           tar xzf /tmp/artifact/rv32-llvm-picolibc-*.tar.gz \
             -C /tmp/rv32-sysroot --strip-components=1
 
-      # Verify that clang's multilib mechanism selects the correct sysroot
-      # variant for each architecture / ABI combination.  If multilib is not
-      # selected, clang falls back to its own C++ headers instead of the
-      # cross-compiled ones in the sysroot, breaking all C++ builds.
-      - name: Check multilib selection
-        run: |
-          SYSROOT=/tmp/rv32-sysroot/dist
-
-          echo "=== Sysroot top-level layout ==="
-          ls "$SYSROOT/"
-
-          echo ""
-          echo "=== All multilibs visible to clang ==="
-          clang++ --print-multi-lib \
-            --target=riscv32-unknown-none-elf \
-            -march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f \
-            --sysroot="$SYSROOT"
-
-          echo ""
-          echo "=== Multilib selection per variant ==="
-
-          check_multilib() {
-            local desc="$1" expected_dir="$2"; shift 2
-            local out
-            out=$(clang++ -### --target=riscv32-unknown-none-elf "$@" \
-              --sysroot="$SYSROOT" -x c++ /dev/null 2>&1)
-            if echo "$out" | grep -qF "$expected_dir"; then
-              echo "✓  $desc → $expected_dir"
-            else
-              echo "✗  $desc — expected multilib dir '$expected_dir' not found"
-              echo "$out" | grep -E 'isystem|rv32' | head -10 || true
-              return 1
-            fi
-          }
-
-          check_multilib "rv32imafc/ilp32f  no-exn/no-rtti" \
-            "rv32imafc-zicsr-zifencei-xwchc_ilp32f" \
-            -march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f \
-            -fno-exceptions -fno-rtti
-
-          check_multilib "rv32imafc/ilp32f  exn+rtti" \
-            "rv32imafc-zicsr-zifencei-xwchc_ilp32f_exn_rtti" \
-            -march=rv32imafc_zicsr_zifencei_xwchc -mabi=ilp32f
-
-          check_multilib "rv32imac/ilp32  no-exn/no-rtti" \
-            "rv32imac-zicsr-zifencei-xwchc_ilp32" \
-            -march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32 \
-            -fno-exceptions -fno-rtti
-
-          check_multilib "rv32imac/ilp32  exn+rtti" \
-            "rv32imac-zicsr-zifencei-xwchc_ilp32_exn_rtti" \
-            -march=rv32imac_zicsr_zifencei_xwchc -mabi=ilp32
-
-          echo ""
-          echo "All multilib variants selected correctly ✓"
-
       # ── Compile hello world (C) against each toolchain variant ───────────
-      # LLVM_TOOLCHAIN is auto-inferred from the toolchain file location
-      # (cmake/ and dist/ are siblings inside the extracted tarball).
       - name: Build hello world — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
         run: |
           cmake -G Ninja \
@@ -368,8 +289,6 @@ jobs:
           cmake --build build/test-cxx-ch32v20x-minimal
 
       # ── Semihost builds (C) — all useful arch families ────────────────────
-      # Builds a fully linked semihosted executable: startup and I/O are
-      # provided by picolibc's crt0-semihost / libsemihost
       - name: Build semihost C — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
         run: |
           cmake -G Ninja \

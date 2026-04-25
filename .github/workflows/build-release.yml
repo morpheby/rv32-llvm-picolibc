@@ -67,16 +67,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Install LLVM from apt.llvm.org ────────────────────────────────────
-      - name: Install LLVM ${{ env.LLVM_VERSION }}
+      # Download the official LLVM release from GitHub
+      - name: Download LLVM ${{ env.LLVM_TAG }} from GitHub releases
         run: |
-          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh ${{ env.LLVM_VERSION }} all
-          # Create unversioned symlinks consumed by the build scripts
-          for tool in clang clang++ llvm-ar llvm-ranlib llvm-nm llvm-strip llvm-objdump llvm-as; do
-            sudo ln -sf /usr/bin/${tool}-${{ env.LLVM_VERSION }} /usr/local/bin/${tool}
-          done
+          LLVM_VER="${LLVM_TAG#llvmorg-}"
+          wget -qO /tmp/llvm.tar.xz \
+            "https://github.com/llvm/llvm-project/releases/download/${LLVM_TAG}/LLVM-${LLVM_VER}-Linux-X64.tar.xz"
+          mkdir -p /opt/llvm
+          tar xf /tmp/llvm.tar.xz -C /opt/llvm --strip-components=1
+          echo "/opt/llvm/bin" >> "$GITHUB_PATH"
 
       # ── Install build tools ───────────────────────────────────────────────
       - name: Install build dependencies
