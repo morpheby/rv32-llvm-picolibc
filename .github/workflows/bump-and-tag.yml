@@ -20,6 +20,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   bump-and-tag:
@@ -73,5 +74,15 @@ jobs:
             "${{ inputs.picolibc_ver }}" \
             "${{ inputs.release_num }}"
           git push origin "v${{ inputs.llvm_ver }}-${{ inputs.picolibc_ver }}-${{ inputs.release_num }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger build-release workflow
+        run: |
+          # Tags pushed via GITHUB_TOKEN do not automatically trigger other
+          # workflows (GitHub security limitation). Dispatch it explicitly.
+          gh workflow run build-release.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref "v${{ inputs.llvm_ver }}-${{ inputs.picolibc_ver }}-${{ inputs.release_num }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
