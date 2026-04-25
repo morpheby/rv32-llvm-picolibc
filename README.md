@@ -146,10 +146,10 @@ export DIST_DIR="$WORKSPACE/rv32-llvm-picolibc"
 export PICOLIBC_CROSS_FILES_DIR="$XPACK_DIR/picolibc-cross-files"
 
 # 4. Build in order
-(cd workspace/llvm-project && bash "$XPACK_DIR/scripts/build-compiler_rt.sh")
-(cd workspace/picolibc      && bash "$XPACK_DIR/scripts/build-picolibc.sh")
-(cd workspace/llvm-project && bash "$XPACK_DIR/scripts/build-libcxx.sh")
+(cd workspace/llvm-project && "$XPACK_DIR/scripts/build-compiler_rt.sh")
+(cd workspace/picolibc      && "$XPACK_DIR/scripts/build-picolibc.sh")
+(cd workspace/llvm-project && "$XPACK_DIR/scripts/build-libcxx.sh")
 
 # 5. Package
-VERSION=21.1.8-1 OUTDIR=. bash "$XPACK_DIR/scripts/package-dist.sh"
+VERSION=21.1.8-1 OUTDIR=. "$XPACK_DIR/scripts/package-dist.sh"
 ```

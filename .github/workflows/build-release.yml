@@ -111,7 +111,7 @@ jobs:
           DIST_DIR: ${{ github.workspace }}/build-workspace/rv32-llvm-picolibc
         run: |
           cd build-workspace/llvm-project
-          bash "${GITHUB_WORKSPACE}/scripts/build-compiler_rt.sh"
+          "${GITHUB_WORKSPACE}/scripts/build-compiler_rt.sh"
 
       - name: Build picolibc
         env:
@@ -120,7 +120,7 @@ jobs:
           PICOLIBC_CROSS_FILES_DIR: ${{ github.workspace }}/picolibc-cross-files
         run: |
           cd build-workspace/picolibc
-          bash "${GITHUB_WORKSPACE}/scripts/build-picolibc.sh"
+          "${GITHUB_WORKSPACE}/scripts/build-picolibc.sh"
 
       - name: Build libcxx / libcxxabi / libunwind
         env:
@@ -128,7 +128,7 @@ jobs:
           DIST_DIR: ${{ github.workspace }}/build-workspace/rv32-llvm-picolibc
         run: |
           cd build-workspace/llvm-project
-          bash "${GITHUB_WORKSPACE}/scripts/build-libcxx.sh"
+          "${GITHUB_WORKSPACE}/scripts/build-libcxx.sh"
 
       # ── Package ───────────────────────────────────────────────────────────
       - name: Package sysroot tarball
@@ -138,7 +138,7 @@ jobs:
           OUTDIR: ${{ github.workspace }}/dist-out
         run: |
           mkdir -p dist-out
-          VERSION="${RELEASE_VERSION}" bash scripts/package-dist.sh
+          VERSION="${RELEASE_VERSION}" scripts/package-dist.sh
 
       # ── Update package.json with computed sha256 ──────────────────────────
       - name: Update package.json with release metadata
