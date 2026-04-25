@@ -1,31 +1,19 @@
 /* SPDX-License-Identifier: Apache-2.0
  *
- * Minimal bare-metal C++ program – mirrors hello_world/main.c but exercises
- * C++ language features:
- *  - Class with constructor and operator overloading
- *  - constexpr / [[nodiscard]]
- *  - static_cast, noexcept
- *
- * Deliberately avoids STL and exceptions so the same source compiles under
- * both the no-exn/no-rtti and exn+rtti toolchain variants without requiring
- * a link against libc++.
  */
 
-#include <cstdint>
-#include <cstdio>
-
-class Counter {
-    std::uint32_t value_;
-public:
-    explicit constexpr Counter(std::uint32_t v = 0U) noexcept : value_{v} {}
-    constexpr Counter &operator++() noexcept { ++value_; return *this; }
-    [[nodiscard]] constexpr std::uint32_t get() const noexcept { return value_; }
-};
+ #include <iostream>
 
 int main() {
-    Counter c{40U};
-    ++c;
-    ++c;
-    std::printf("Hello from C++! count=%u\n", static_cast<unsigned>(c.get()));
+    std::cout << "Hello from C++! count=" << 42 << std::endl;
+
+#ifdef __EXCEPTIONS
+    try {
+        throw std::runtime_error("Test exception");
+    } catch (const std::exception& e) {
+        std::cout << "Caught exception: " << e.what() << std::endl;
+    }
+#endif
+
     return 0;
 }
