@@ -146,7 +146,7 @@ export DIST_DIR="$WORKSPACE/rv32-llvm-picolibc"
 export PICOLIBC_CROSS_FILES_DIR="$XPACK_DIR/picolibc-cross-files"
 
 # 4. Build in order
-(cd workspace/llvm-project && "$XPACK_DIR/scripts/build-compiler_rt.sh")
+(cd workspace/llvm-project &&  "$XPACK_DIR/scripts/build-compiler_rt.sh")
 (cd workspace/picolibc      && "$XPACK_DIR/scripts/build-picolibc.sh")
 (cd workspace/llvm-project && "$XPACK_DIR/scripts/build-libcxx.sh")
 
