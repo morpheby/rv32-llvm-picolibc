@@ -146,21 +146,31 @@ set(CMAKE_C_FLAGS_INIT   "-std=gnu23 ${COMMON_FLAGS_STR}")
 set(CMAKE_CXX_FLAGS_INIT "${COMMON_FLAGS_STR} -std=gnu++20 -fno-threadsafe-statics -fno-use-cxa-atexit -fpermissive")
 set(CMAKE_ASM_FLAGS_INIT "${ARCH_FLAGS_STR} --target=riscv32-unknown-none-elf -x assembler-with-cpp")
 
-# ----- Linker flags -----
-# NOTE: -lch32_hal must be provided by the application project (via
-#       third_party/ch32_hal or an equivalent target).  Adjust the -L path to
-#       match the project layout.
+# ----- Linker libraries -----
+# Default: the CH32V MCU firmware combination.
+#   -lch32_hal        hardware-abstraction layer (must be built by the project)
+#   -lcrt0            picolibc C run-time start-up
+#   -lcrt0-inittls    TLS initialisation stub
+#   -Lthird_party/ch32_hal  search path for ch32_hal built in-tree
+#
+# Wrappers can set _CH32_LINKER_LIBS before including this file to select a
+# different combination, e.g. for semihosting:
+#   set(_CH32_LINKER_LIBS "-lcrt0-semihost -lsemihost")
+#
 # NOTE: For the exn+rtti variants (i.e. when _CH32_NO_EXCEPTIONS is FALSE),
 #       add -lc++ to the project's link step to pull in libc++, libc++abi and
 #       libunwind (all statically linked inside libc++.a in the sysroot).
+if(NOT DEFINED _CH32_LINKER_LIBS)
+    set(_CH32_LINKER_LIBS "-lch32_hal -lcrt0 -lcrt0-inittls -Lthird_party/ch32_hal")
+endif()
+
 set(CMAKE_EXE_LINKER_FLAGS_INIT
     "--sysroot=${LLVM_TOOLCHAIN} ${ARCH_FLAGS_STR} \
 -Wl,--gc-sections \
--lch32_hal -lcrt0 -lcrt0-inittls \
+${_CH32_LINKER_LIBS} \
 -Wl,--defsym=vfprintf=__f_vfprintf \
 -Wl,--defsym=vfscanf=__m_vfscanf \
--nostartfiles \
--Lthird_party/ch32_hal")
+-nostartfiles")
 
 # TODO: Those are some things Espressif uses for optimization. Consider the impact later.
     # -mllvm -inline-threshold=500

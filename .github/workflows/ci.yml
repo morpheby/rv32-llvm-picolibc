@@ -257,3 +257,15 @@ jobs:
             -S tests/hello_world \
             -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-minimal.cmake
           cmake --build build/test-ch32v20x-minimal
+
+      # ── Semihost build for CH32V303 ───────────────────────────────────────
+      # Builds a fully linked semihosted executable: startup and I/O are
+      # provided by picolibc's crt0-semihost / libsemihost; no ch32_hal
+      # is required.
+      - name: Build semihost — CH32V303 (rv32imafc / ilp32f)
+        run: |
+          cmake -G Ninja \
+            -B build/test-semihost-ch32v303 \
+            -S tests/semihost_ch32v303 \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v303-semihost.cmake
+          cmake --build build/test-semihost-ch32v303
