@@ -10,17 +10,45 @@ on:
 permissions:
   contents: read
 
-env:
-  LLVM_VERSION: "21"
-  LLVM_TAG: "llvmorg-21.1.8"
-  PICOLIBC_TAG: "1.8.11"
-
 jobs:
+  get-version:
+    name: Get version from latest tag
+    runs-on: ubuntu-24.04
+    outputs:
+      llvm_version: ${{ steps.version.outputs.llvm_version }}
+      llvm_tag: ${{ steps.version.outputs.llvm_tag }}
+      picolibc_tag: ${{ steps.version.outputs.picolibc_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+      - name: Extract versions from latest tag
+        id: version
+        run: |
+          git fetch --tags --quiet
+          LATEST_TAG="$(git tag --sort=-version:refname | grep '^v' | head -1)"
+          if [[ -z "$LATEST_TAG" ]]; then
+            echo "No version tag found; falling back to defaults" >&2
+            LATEST_TAG="v21.1.8-1.8.11-1"
+          fi
+          RAW="${LATEST_TAG#v}"
+          REST="${RAW%-*}"
+          PICOLIBC_VER="${REST##*-}"
+          LLVM_VER="${REST%-*}"
+          LLVM_MAJOR="${LLVM_VER%%.*}"
+          echo "llvm_tag=llvmorg-${LLVM_VER}" >> "$GITHUB_OUTPUT"
+          echo "llvm_version=${LLVM_MAJOR}"   >> "$GITHUB_OUTPUT"
+          echo "picolibc_tag=${PICOLIBC_VER}" >> "$GITHUB_OUTPUT"
+
   build-sysroot:
     name: Build sysroot
+    needs: get-version
     runs-on: ubuntu-24.04
 
     env:
+      LLVM_VERSION: ${{ needs.get-version.outputs.llvm_version }}
+      LLVM_TAG: ${{ needs.get-version.outputs.llvm_tag }}
+      PICOLIBC_TAG: ${{ needs.get-version.outputs.picolibc_tag }}
       WORKSPACE: ${{ github.workspace }}/workspace
       DIST_DIR: ${{ github.workspace }}/workspace/rv32-llvm-picolibc
       INSTALL_PREFIX: /usr/local/llvm-riscv
@@ -110,8 +138,11 @@ jobs:
 
   test-toolchain:
     name: Test toolchain usability
-    needs: build-sysroot
+    needs: [build-sysroot, get-version]
     runs-on: ubuntu-24.04
+
+    env:
+      LLVM_VERSION: ${{ needs.get-version.outputs.llvm_version }}
 
     steps:
       - name: Checkout

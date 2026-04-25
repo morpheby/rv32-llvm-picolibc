@@ -11,7 +11,6 @@
 #   e.g. 21.1.8-1.8.11-1  →  tag v21.1.8-1.8.11-1
 #
 # Updates:
-#   - .github/workflows/ci.yml             (LLVM_TAG, PICOLIBC_TAG, LLVM_VERSION)
 #   - package.json                          (version, xpack binaries URLs/filenames)
 #   - README.md                             (LLVM major heading, xpack install version)
 
@@ -43,19 +42,6 @@ echo "    LLVM:      ${LLVM_TAG}  (major: ${LLVM_MAJOR})"
 echo "    picolibc:  ${PICOLIBC_VER}"
 echo "    Release:   ${RELEASE_VERSION}"
 echo "    xpack npm: ${XPACK_VERSION}"
-
-# ── CI workflow files ─────────────────────────────────────────────────────────
-# build-release.yml derives LLVM_TAG/PICOLIBC_TAG/LLVM_VERSION from the git
-# tag at runtime, so it does not contain hardcoded version env vars.
-for WF in ci.yml; do
-    WF_PATH="${REPO_ROOT}/.github/workflows/${WF}"
-    "${SED_I[@]}" \
-        -e "s|LLVM_TAG: \"llvmorg-[^\"]*\"|LLVM_TAG: \"${LLVM_TAG}\"|" \
-        -e "s|LLVM_VERSION: \"[^\"]*\"|LLVM_VERSION: \"${LLVM_MAJOR}\"|" \
-        -e "s|PICOLIBC_TAG: \"[^\"]*\"|PICOLIBC_TAG: \"${PICOLIBC_VER}\"|" \
-        "${WF_PATH}"
-    echo "==> Updated ${WF}"
-done
 
 # ── package.json ──────────────────────────────────────────────────────────────
 PKG="${REPO_ROOT}/package.json"
