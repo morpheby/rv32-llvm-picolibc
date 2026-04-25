@@ -132,10 +132,7 @@ set(COMMON_FLAGS
     -fvirtual-function-elimination
     -fwhole-program-vtables
     ${_EXN_RTTI_FLAGS}
-    ${_CH32_EXTRA_FLAGS}
     -fcolor-diagnostics
-    -D_PICOLIBC_PRINTF='f'
-    -D_PICOLIBC_SCANF='m'
     -D_GNU_SOURCE=1
     -fconstexpr-steps=134217728
 )
@@ -146,17 +143,9 @@ set(CMAKE_C_FLAGS_INIT   "-std=gnu23 ${COMMON_FLAGS_STR}")
 set(CMAKE_CXX_FLAGS_INIT "${COMMON_FLAGS_STR} -std=gnu++20 -fno-threadsafe-statics -fno-use-cxa-atexit -fpermissive")
 set(CMAKE_ASM_FLAGS_INIT "${ARCH_FLAGS_STR} --target=riscv32-unknown-none-elf -x assembler-with-cpp")
 
-# ----- Linker libraries -----
-if(NOT DEFINED _CH32_LINKER_LIBS)
-    set(_CH32_LINKER_LIBS "-lcrt0 -lcrt0-inittls")
-endif()
-
 set(CMAKE_EXE_LINKER_FLAGS_INIT
     "--sysroot=${LLVM_TOOLCHAIN} ${ARCH_FLAGS_STR} \
 -Wl,--gc-sections \
-${_CH32_LINKER_LIBS} \
--Wl,--defsym=vfprintf=__f_vfprintf \
--Wl,--defsym=vfscanf=__m_vfscanf \
 -Wl,--undefined=__end \
 -nostartfiles \
 --rtlib=compiler-rt")
