@@ -27,27 +27,7 @@ diff --git a/compiler-rt/cmake/Modules/CompilerRTUtils.cmake b/compiler-rt/cmake
 index 03db38fa4..0cf69504b 100644
 --- a/compiler-rt/cmake/Modules/CompilerRTUtils.cmake
 +++ b/compiler-rt/cmake/Modules/CompilerRTUtils.cmake
-@@ -119,10 +119,10 @@ macro(test_target_arch arch def)
-   if(NOT DEFINED CAN_TARGET_${arch})
-     if(NOT HAS_${arch}_DEF)
-       set(CAN_TARGET_${arch} FALSE)
-     elseif(TEST_COMPILE_ONLY)
-       try_compile_only(CAN_TARGET_${arch}
-                        SOURCE "#include <limits.h>\nint foo(int x, int y) { return x + y; }\n"
-                        FLAGS ${TARGET_${arch}_CFLAGS})
-     else()
-       set(FLAG_NO_EXCEPTIONS "")
-       if(COMPILER_RT_HAS_FNO_EXCEPTIONS_FLAG)
-@@ -134,8 +134,8 @@ macro(test_target_arch arch def)
-                   COMPILE_DEFINITIONS "${TARGET_${arch}_CFLAGS} ${FLAG_NO_EXCEPTIONS}"
-                   OUTPUT_VARIABLE TARGET_${arch}_OUTPUT)
-       set(CMAKE_EXE_LINKER_FLAGS ${SAVED_CMAKE_EXE_LINKER_FLAGS})
-     endif()
-   endif()
-   if(${CAN_TARGET_${arch}})
-     list(APPEND COMPILER_RT_SUPPORTED_ARCH ${arch})
-   elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" STREQUAL "${arch}" AND
-@@ -378,8 +382,7 @@ macro(construct_compiler_rt_default_triple)
+@@ -378,8 +378,7 @@ macro(construct_compiler_rt_default_triple)
      if (target_triple MATCHES "aix")
        string(REGEX REPLACE "[0-9.]+$" "" target_triple "${target_triple}")
      endif()
@@ -57,17 +37,6 @@ index 03db38fa4..0cf69504b 100644
    endif()
  
    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-diff --git a/compiler-rt/cmake/base-config-ix.cmake b/compiler-rt/cmake/base-config-ix.cmake
-index d92bc0e71..018f59c70 100644
---- a/compiler-rt/cmake/base-config-ix.cmake
-+++ b/compiler-rt/cmake/base-config-ix.cmake
-@@ -210,6 +210,6 @@ macro(test_targets)
-     detect_target_arch()
-     set(COMPILER_RT_OS_SUFFIX "-android")
-   elseif(NOT APPLE) # Supported archs for Apple platforms are generated later
-     if(COMPILER_RT_DEFAULT_TARGET_ONLY)
-       add_default_target_arch(${COMPILER_RT_DEFAULT_TARGET_ARCH})
-     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "i[2-6]86|x86|amd64")
 diff --git a/libc/cmake/modules/LLVMLibCArchitectures.cmake b/libc/cmake/modules/LLVMLibCArchitectures.cmake
 index c94a407d9..0fd749eaf 100644
 --- a/libc/cmake/modules/LLVMLibCArchitectures.cmake
