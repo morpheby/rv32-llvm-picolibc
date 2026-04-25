@@ -36,9 +36,36 @@ jobs:
           PICOLIBC_VER="${REST##*-}"
           LLVM_VER="${REST%-*}"
           LLVM_MAJOR="${LLVM_VER%%.*}"
-          echo "llvm_tag=llvmorg-${LLVM_VER}" >> "$GITHUB_OUTPUT"
-          echo "llvm_version=${LLVM_MAJOR}"   >> "$GITHUB_OUTPUT"
-          echo "picolibc_tag=${PICOLIBC_VER}" >> "$GITHUB_OUTPUT"
+          LLVM_MINOR="${LLVM_VER#*.}"
+          LLVM_MINOR="${LLVM_MINOR%%.*}"
+          LLVM_TAG="llvmorg-${LLVM_VER}"
+
+          # Verify the derived LLVM tag exists in the upstream repo.
+          # If not (e.g. a future version was tagged in this repo before LLVM
+          # released it), find the highest available patch for the same major.minor.
+          if ! git ls-remote --tags --exit-code \
+              https://github.com/llvm/llvm-project.git \
+              "refs/tags/${LLVM_TAG}" > /dev/null 2>&1; then
+            echo "WARNING: ${LLVM_TAG} not found upstream; searching for latest ${LLVM_MAJOR}.${LLVM_MINOR}.x" >&2
+            LLVM_TAG="$(git ls-remote --tags \
+              https://github.com/llvm/llvm-project.git \
+              "refs/tags/llvmorg-${LLVM_MAJOR}.${LLVM_MINOR}.*" \
+              | awk '{print $2}' \
+              | grep -v '\^{}' \
+              | sed 's|refs/tags/||' \
+              | grep -E "^llvmorg-${LLVM_MAJOR}\.${LLVM_MINOR}\.[0-9]+$" \
+              | sort -t. -k3 -n \
+              | tail -1)"
+            if [[ -z "${LLVM_TAG}" ]]; then
+              echo "ERROR: No upstream llvmorg-${LLVM_MAJOR}.${LLVM_MINOR}.x tag found." >&2
+              exit 1
+            fi
+            echo "Using upstream tag: ${LLVM_TAG}" >&2
+          fi
+
+          echo "llvm_tag=${LLVM_TAG}"          >> "$GITHUB_OUTPUT"
+          echo "llvm_version=${LLVM_MAJOR}"    >> "$GITHUB_OUTPUT"
+          echo "picolibc_tag=${PICOLIBC_VER}"  >> "$GITHUB_OUTPUT"
 
   build-sysroot:
     name: Build sysroot
@@ -97,7 +124,13 @@ jobs:
       - name: Apply LLVM patch (${{ env.LLVM_TAG }})
         run: |
           cd workspace/llvm-project
-          git apply "$XPACK_DIR/patches/${{ env.LLVM_TAG }}.patch"
+          PATCH_FILE="$XPACK_DIR/patches/${{ env.LLVM_TAG }}.patch"
+          if [[ -f "${PATCH_FILE}" ]]; then
+            echo "Applying ${PATCH_FILE}"
+            git apply "${PATCH_FILE}"
+          else
+            echo "No patch file found for ${{ env.LLVM_TAG }}, skipping"
+          fi
 
       # multilib.yaml must be present in the llvm-project root so that
       # build-libcxx.sh can copy it into the assembled sysroot.
