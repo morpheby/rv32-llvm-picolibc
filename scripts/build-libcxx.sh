@@ -117,12 +117,14 @@ for i in "${!variants[@]}" ; do
     -DLIBUNWIND_IS_BAREMETAL=ON                                               \
     -DLIBUNWIND_REMEMBER_HEAP_ALLOC=ON                                        \
     -DLIBUNWIND_USE_COMPILER_RT=ON                                            \
+    -DLIBUNWIND_TARGET_TRIPLE=riscv32-unknown-none-elf                        \
     -DRUNTIME_VARIANT_NAME="${b}"                                             \
     -DLIBCXXABI_ENABLE_THREADS=OFF                                            \
     -DLIBCXX_ENABLE_MONOTONIC_CLOCK=OFF                                       \
     -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF                                         \
     -DLIBCXX_ENABLE_THREADS=OFF                                               \
     -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF                                       \
+    -DLIBCXX_INSTALL_INCLUDE_TARGET_DIR=include-target                        \
     -DLIBUNWIND_ENABLE_THREADS=OFF                                            \
     -DRUNTIMES_USE_LIBC=picolibc                                              \
     -DLLVM_DEFAULT_TARGET_TRIPLE=riscv32-unknown-none-elf                     \
@@ -139,7 +141,13 @@ for i in "${!variants[@]}" ; do
 
   ninja -C "build-libcxx-${b}"
   DESTDIR="./dist" ninja -C "build-libcxx-${b}" install
-
-  mkdir -p "${DIST_DIR}/dist/${b}/"
-  cp -R "build-libcxx-${b}/dist${INSTALL_PREFIX}/." "${DIST_DIR}/dist/${b}/"
+  
+  mkdir -p "${DIST_DIR}/dist/${b}/include"
+  mkdir -p "${DIST_DIR}/dist/${b}/lib"
+  mkdir -p "${DIST_DIR}/dist/${b}/share"
+  mkdir -p "${DIST_DIR}/dist/include/"
+  cp -R "build-libcxx-${b}/dist${INSTALL_PREFIX}/include-target/." "${DIST_DIR}/dist/${b}/include/"
+  cp -R "build-libcxx-${b}/dist${INSTALL_PREFIX}/lib/." "${DIST_DIR}/dist/${b}/lib/"
+  cp -R "build-libcxx-${b}/dist${INSTALL_PREFIX}/share/." "${DIST_DIR}/dist/${b}/share/"
+  cp -R "build-libcxx-${b}/dist${INSTALL_PREFIX}/include/." "${DIST_DIR}/dist/include/"
 done
