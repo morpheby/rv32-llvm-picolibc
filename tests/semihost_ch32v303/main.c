@@ -6,10 +6,6 @@
 #include <stdio.h>
 
 int main(void) {
-    uint32_t result;
-
-    result = UINT32_C(42);
-    printf("Hello, world %d\n", result);
-
+    printf("Hello from CH32V303 semihost!\n");
     return 0;
 }

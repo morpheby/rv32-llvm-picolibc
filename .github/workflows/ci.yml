@@ -75,8 +75,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install the same LLVM version used to build the sysroot, sourced
-      # directly from the official apt.llvm.org repository.
+      # Download the official LLVM release
       - name: Install LLVM ${{ env.LLVM_VERSION }} from apt.llvm.org
         run: |
           wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
@@ -107,8 +106,6 @@ jobs:
             https://github.com/picolibc/picolibc.git \
             workspace/picolibc
 
-      # Apply the vendor patch that enables bare-metal RISC-V builds in
-      # compiler-rt without requiring an Apple-platform host.
       - name: Apply LLVM patch (${{ env.LLVM_TAG }})
         run: |
           cd workspace/llvm-project
@@ -120,14 +117,9 @@ jobs:
             echo "No patch file found for ${{ env.LLVM_TAG }}, skipping"
           fi
 
-      # multilib.yaml must be present in the llvm-project root so that
-      # build-libcxx.sh can copy it into the assembled sysroot.
       - name: Copy multilib.yaml into llvm-project
         run: cp multilib.yaml workspace/llvm-project/
 
-      # Build order matters: compiler-rt → picolibc → libcxx.
-      # libcxx uses --sysroot pointing at DIST_DIR/dist which must already
-      # contain compiler-rt and picolibc headers+libs.
       - name: Build compiler-rt
         run: |
           cd workspace/llvm-project
@@ -143,10 +135,7 @@ jobs:
           cd workspace/llvm-project
           bash "$XPACK_DIR/scripts/build-libcxx.sh"
 
-      # Package into a tarball with the same layout used by GitHub Releases:
-      #   rv32-llvm-picolibc-<VERSION>/
-      #     dist/    ← sysroot (multilib variants + multilib.yaml)
-      #     cmake/   ← CMake toolchain files
+      # Package into a tarball with the same layout used by GitHub Releases
       - name: Package sysroot
         run: |
           VERSION=${LLVM_VERSION}-${PICOLIBC_TAG#v}
@@ -168,13 +157,13 @@ jobs:
 
     env:
       LLVM_VERSION: ${{ needs.get-version.outputs.llvm_version }}
+      LLVM_TAG: ${{ needs.get-version.outputs.llvm_tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install the same LLVM version used to build the sysroot, sourced
-      # directly from the official apt.llvm.org repository.
+      # Download the official LLVM release
       - name: Install LLVM ${{ env.LLVM_VERSION }} from apt.llvm.org
         run: |
           wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
@@ -189,10 +178,6 @@ jobs:
         run: sudo apt-get install -y cmake ninja-build
 
       # Fetch the sysroot tarball produced by the build-sysroot job.
-      # The tarball layout is:
-      #   rv32-llvm-picolibc-<ver>/
-      #     dist/    ← LLVM_TOOLCHAIN sysroot (multilib)
-      #     cmake/   ← toolchain files bundled in the release
       - name: Download sysroot artifact
         uses: actions/download-artifact@v4
         with:
@@ -205,9 +190,7 @@ jobs:
           tar xzf /tmp/artifact/rv32-llvm-picolibc-*.tar.gz \
             -C /tmp/rv32-sysroot --strip-components=1
 
-      # ── Compile hello world against each toolchain variant ────────────────
-      # LLVM_TOOLCHAIN is auto-inferred from the toolchain file location
-      # (cmake/ and dist/ are siblings inside the extracted tarball).
+      # ── Compile hello world (C) against each toolchain variant ───────────
       - name: Build hello world — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
         run: |
           cmake -G Ninja \
@@ -224,7 +207,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v-exn-rtti.cmake
           cmake --build build/test-ch32v-exn-rtti
 
-      # ── Compile hello world against the CH32V20x (rv32imac / ilp32) toolchain ─
+      # ── Compile hello world (C) against the CH32V20x (rv32imac / ilp32) toolchain ─
       - name: Build hello world — CH32V20x (rv32imac / ilp32, no-exn/no-rtti)
         run: |
           cmake -G Ninja \
@@ -241,7 +224,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-exn-rtti.cmake
           cmake --build build/test-ch32v20x-exn-rtti
 
-      # ── Compile hello world against the minimal (no-locale) toolchain variants ─
+      # ── Compile hello world (C) against the minimal (no-locale) toolchain variants ─
       - name: Build hello world — CH32V (rv32imafc / ilp32f, minimal/no-locale)
         run: |
           cmake -G Ninja \
@@ -257,3 +240,102 @@ jobs:
             -S tests/hello_world \
             -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-minimal.cmake
           cmake --build build/test-ch32v20x-minimal
+
+      # ── Compile hello world (C++) against each toolchain variant ──────────
+      - name: Build hello world C++ — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-cxx-ch32v \
+            -S tests/hello_world_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v.cmake
+          cmake --build build/test-cxx-ch32v
+
+      - name: Build hello world C++ — CH32V (rv32imafc / ilp32f, exn+rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-cxx-ch32v-exn-rtti \
+            -S tests/hello_world_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v-exn-rtti.cmake
+          cmake --build build/test-cxx-ch32v-exn-rtti
+
+      - name: Build hello world C++ — CH32V20x (rv32imac / ilp32, no-exn/no-rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-cxx-ch32v20x \
+            -S tests/hello_world_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x.cmake
+          cmake --build build/test-cxx-ch32v20x
+
+      - name: Build hello world C++ — CH32V20x (rv32imac / ilp32, exn+rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-cxx-ch32v20x-exn-rtti \
+            -S tests/hello_world_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-exn-rtti.cmake
+          cmake --build build/test-cxx-ch32v20x-exn-rtti
+
+      - name: Build hello world C++ — CH32V (rv32imafc / ilp32f, minimal/no-locale)
+        run: |
+          cmake -G Ninja \
+            -B build/test-cxx-ch32v-minimal \
+            -S tests/hello_world_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v-minimal.cmake
+          cmake --build build/test-cxx-ch32v-minimal
+
+      - name: Build hello world C++ — CH32V20x (rv32imac / ilp32, minimal/no-locale)
+        run: |
+          cmake -G Ninja \
+            -B build/test-cxx-ch32v20x-minimal \
+            -S tests/hello_world_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-minimal.cmake
+          cmake --build build/test-cxx-ch32v20x-minimal
+
+      # ── Semihost builds (C) — all useful arch families ────────────────────
+      - name: Build semihost C — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-semihost-ch32v \
+            -S tests/semihost_ch32v303 \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v.cmake
+          cmake --build build/test-semihost-ch32v
+
+      - name: Build semihost C — CH32V20x (rv32imac / ilp32, no-exn/no-rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-semihost-ch32v20x \
+            -S tests/semihost_ch32v303 \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x.cmake
+          cmake --build build/test-semihost-ch32v20x
+
+      # ── Semihost builds (C++) — all useful arch families ──────────────────
+      - name: Build semihost C++ — CH32V (rv32imafc / ilp32f, no-exn/no-rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-semihost-cxx-ch32v \
+            -S tests/semihost_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v.cmake
+          cmake --build build/test-semihost-cxx-ch32v
+
+      - name: Build semihost C++ — CH32V (rv32imafc / ilp32f, exn+rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-semihost-cxx-ch32v-exn-rtti \
+            -S tests/semihost_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v-exn-rtti.cmake
+          cmake --build build/test-semihost-cxx-ch32v-exn-rtti
+
+      - name: Build semihost C++ — CH32V20x (rv32imac / ilp32, no-exn/no-rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-semihost-cxx-ch32v20x \
+            -S tests/semihost_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x.cmake
+          cmake --build build/test-semihost-cxx-ch32v20x
+
+      - name: Build semihost C++ — CH32V20x (rv32imac / ilp32, exn+rtti)
+        run: |
+          cmake -G Ninja \
+            -B build/test-semihost-cxx-ch32v20x-exn-rtti \
+            -S tests/semihost_cxx \
+            -DCMAKE_TOOLCHAIN_FILE=/tmp/rv32-sysroot/cmake/clang-riscv-ch32v20x-exn-rtti.cmake
+          cmake --build build/test-semihost-cxx-ch32v20x-exn-rtti

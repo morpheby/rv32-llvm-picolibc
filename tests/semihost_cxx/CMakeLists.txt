@@ -1,18 +1,19 @@
 cmake_minimum_required(VERSION 3.20)
-project(HelloWorldTest C)
+project(SemihostCxxTest CXX)
 
 add_definitions(
     -D_PICOLIBC_PRINTF='f'
     -D_PICOLIBC_SCANF='m'
 )
 
-add_executable(hello_world main.c os.c)
+add_executable(semihost_cxx main.cpp)
 
-target_link_libraries(hello_world PRIVATE
-    crt0
+target_link_libraries(semihost_cxx PRIVATE
+    crt0-semihost
+    semihost
 )
 
-target_link_options(hello_world PRIVATE
+target_link_options(semihost_cxx PRIVATE
     -Wl,--defsym=vfprintf=__f_vfprintf
     -Wl,--defsym=vfscanf=__m_vfscanf
     -T${CMAKE_CURRENT_SOURCE_DIR}/ch32v303.ld)

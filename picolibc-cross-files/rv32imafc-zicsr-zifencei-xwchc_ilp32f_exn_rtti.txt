@@ -17,8 +17,8 @@ cpu = 'riscv'
 endian = 'little'
 
 [properties]
-#libgcc ='-lclang_rt.builtins'
-separate_boot_flash = true
+librt = '-lclang_rt.builtins'
+separate_boot_flash = false
 c_args = ['-Werror=double-promotion']
 c_link_args = []
 cpp_link_args = []

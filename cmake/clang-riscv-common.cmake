@@ -102,10 +102,7 @@ set(COMMON_FLAGS
     -fvirtual-function-elimination
     -fwhole-program-vtables
     ${_EXN_RTTI_FLAGS}
-    ${_CH32_EXTRA_FLAGS}
     -fcolor-diagnostics
-    -D_PICOLIBC_PRINTF='f'
-    -D_PICOLIBC_SCANF='m'
     -D_GNU_SOURCE=1
     -fconstexpr-steps=134217728
 )
@@ -119,11 +116,9 @@ set(CMAKE_ASM_FLAGS_INIT "${ARCH_FLAGS_STR} --target=riscv32-unknown-none-elf -x
 set(CMAKE_EXE_LINKER_FLAGS_INIT
     "--sysroot=${LLVM_TOOLCHAIN} ${ARCH_FLAGS_STR} \
     -Wl,--gc-sections \
-    -lch32_hal -lcrt0 -lcrt0-inittls \
-    -Wl,--defsym=vfprintf=__f_vfprintf \
-    -Wl,--defsym=vfscanf=__m_vfscanf \
+    -Wl,--undefined=__end \
     -nostartfiles \
-    -Lthird_party/ch32_hal")
+    --rtlib=compiler-rt")
 
 # TODO: Those are some things Espressif uses for optimization. Consider the impact later.
     # -mllvm -inline-threshold=500

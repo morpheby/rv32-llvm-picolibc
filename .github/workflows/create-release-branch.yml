@@ -37,19 +37,6 @@ jobs:
           git remote set-url origin \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git checkout -b "${BRANCH}"
-          # Use release_num=1 as placeholder; the actual number is computed
-          # automatically during the Build and Release workflow.
-          bash scripts/update-version.sh \
-            "${{ inputs.llvm_ver }}" \
-            "${{ inputs.picolibc_ver }}" \
-            "1"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No version changes detected."
-          else
-            git commit -m "chore: set version to v${{ inputs.llvm_ver }}-${{ inputs.picolibc_ver }} [skip ci]"
-          fi
-          git push origin "${BRANCH}"
           echo "Release branch created: ${BRANCH}"
           echo "Run the 'Build and Release' workflow on this branch to publish."
         env:
