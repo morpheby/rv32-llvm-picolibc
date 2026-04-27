@@ -123,7 +123,6 @@ for i in "${!variants[@]}" ; do
     -DLIBCXX_ENABLE_MONOTONIC_CLOCK=OFF                                       \
     -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF                                         \
     -DLIBCXX_ENABLE_THREADS=OFF                                               \
-    -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF                                       \
     -DLIBCXX_INSTALL_INCLUDE_TARGET_DIR=include-target                        \
     -DLIBUNWIND_ENABLE_THREADS=OFF                                            \
     -DRUNTIMES_USE_LIBC=picolibc                                              \
